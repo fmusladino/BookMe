@@ -1,0 +1,62 @@
+{
+  "name": "BookMe — Gestión de turnos",
+  "short_name": "BookMe",
+  "description": "Gestioná tu agenda de turnos desde el celular",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0F2A47",
+  "theme_color": "#0F2A47",
+  "orientation": "portrait-primary",
+  "categories": ["business", "medical", "productivity"],
+  "lang": "es-AR",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "BookMe - Pantalla principal"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mi Agenda",
+      "short_name": "Agenda",
+      "url": "/dashboard/agenda",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mis Turnos",
+      "short_name": "Turnos",
+      "url": "/mis-turnos",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

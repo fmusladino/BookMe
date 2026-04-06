@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Variables de color BookMe ──────────────────────────────────────────────
+   Navy    #0F2A47 — azul oscuro principal (headers, textos importantes)
+   Mint    #34D399 — verde menta (CTAs, confirmaciones, éxito)
+   Sky     #0EA5E9 — celeste (links, acciones secundarias)
+*/
+@layer base {
+  :root {
+    --bookme-navy: 213 64% 17%;          /* #0F2A47 */
+    --bookme-navy-light: 213 50% 28%;    /* variante clara para hover */
+    --bookme-mint: 158 69% 52%;          /* #34D399 */
+    --bookme-mint-dark: 158 69% 40%;     /* variante oscura para hover */
+    --bookme-sky: 199 89% 48%;           /* #0EA5E9 */
+
+    /* shadcn/ui tokens — modo claro */
+    --background: 0 0% 100%;
+    --foreground: 222 84% 5%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 84% 5%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 84% 5%;
+    --primary: 213 64% 17%;              /* navy */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 84% 5%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 158 69% 52%;               /* mint */
+    --accent-foreground: 222 84% 5%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 199 89% 48%;                 /* sky */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --bookme-navy: 213 64% 17%;
+    --bookme-navy-light: 213 50% 28%;
+    --bookme-mint: 158 69% 52%;
+    --bookme-mint-dark: 158 69% 40%;
+    --bookme-sky: 199 89% 48%;
+
+    /* shadcn/ui tokens — modo oscuro */
+    --background: 222 84% 5%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 158 69% 52%;              /* mint en dark */
+    --primary-foreground: 222 84% 5%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 199 89% 48%;               /* sky en dark */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 158 69% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+}
+
+/* ─── PWA & Mobile — Safe area insets para notch/Dynamic Island/home indicator ── */
+@supports (padding: env(safe-area-inset-top)) {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-area-inset {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+}
+
+/* Prevenir selección accidental en elementos interactivos en mobile */
+@layer utilities {
+  .touch-action-manipulation {
+    touch-action: manipulation;
+  }
+  .select-none-mobile {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Ocultar scrollbar en PWA standalone */
+  .standalone-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .standalone-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* PWA standalone — ajustes cuando se ejecuta como app instalada */
+@media (display-mode: standalone) {
+  body {
+    /* Evitar overscroll bounce en iOS */
+    overscroll-behavior: none;
+    /* Safe area padding automático */
+    padding-top: env(safe-area-inset-top);
+  }
+}

@@ -1,0 +1,29 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# builds
+.next
+dist
+.turbo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Supabase
+supabase/.temp
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
