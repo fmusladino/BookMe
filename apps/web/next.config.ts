@@ -4,15 +4,8 @@ const nextConfig: NextConfig = {
   // Transpila los packages del monorepo
   transpilePackages: ["@bookme/database", "@bookme/notifications", "@bookme/config"],
 
-  // googleapis es opcional (solo se necesita si el profesional conecta GCal).
-  // Lo marcamos como external para que webpack no intente resolverlo en build time.
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals = config.externals || [];
-      config.externals.push("googleapis");
-    }
-    return config;
-  },
+  // Paquetes que requieren módulos nativos de Node y no deben ser bundleados por webpack
+  serverExternalPackages: ["pdfkit", "fontkit", "iconv-lite", "googleapis"],
 
   // Silencia el warning de workspace root en monorepos
   outputFileTracingRoot: require("path").join(__dirname, "../../"),
