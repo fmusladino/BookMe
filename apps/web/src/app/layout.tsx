@@ -1,3 +1,7 @@
+// Forzar rendering dinámico en toda la app — evita errores de pre-render
+// cuando las páginas necesitan cookies, Supabase u otros datos del servidor
+export const dynamic = "force-dynamic";
+
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
