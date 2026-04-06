@@ -1,6 +1,13 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env["RESEND_API_KEY"]);
+// Inicialización lazy para evitar error en build time cuando la env var no existe
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(process.env["RESEND_API_KEY"] || "");
+  }
+  return _resend;
+}
 const FROM = process.env["RESEND_FROM_EMAIL"] ?? "BookMe <turnos@bookme.ar>";
 
 export interface AppointmentEmailData {
@@ -21,7 +28,7 @@ export async function sendConfirmationEmail(data: AppointmentEmailData) {
     timeZone: "America/Argentina/Buenos_Aires",
   });
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: data.to,
     subject: `Turno confirmado con ${data.professionalName}`,
@@ -37,7 +44,7 @@ export async function sendReminderEmail(data: AppointmentEmailData) {
     timeZone: "America/Argentina/Buenos_Aires",
   });
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: data.to,
     subject: `Recordatorio: turno mañana con ${data.professionalName}`,
@@ -55,7 +62,7 @@ export async function sendRescheduleEmail(
     timeZone: "America/Argentina/Buenos_Aires",
   });
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: data.to,
     subject: `Tu turno con ${data.professionalName} fue reprogramado`,
@@ -71,7 +78,7 @@ export async function sendCancellationEmail(data: AppointmentEmailData) {
     timeZone: "America/Argentina/Buenos_Aires",
   });
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: data.to,
     subject: `Tu turno con ${data.professionalName} fue cancelado`,
@@ -103,7 +110,7 @@ export async function sendTrialExpiringEmail(data: TrialEmailData) {
       ? `Tu prueba gratuita vence en ${data.daysLeft} días`
       : `Tu prueba gratuita vence en ${data.daysLeft} días`;
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: data.to,
     subject,
@@ -113,7 +120,7 @@ export async function sendTrialExpiringEmail(data: TrialEmailData) {
 
 /** Aviso de trial ya expirado — cuenta pasa a modo solo lectura */
 export async function sendTrialExpiredEmail(data: Omit<TrialEmailData, "daysLeft">) {
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to: data.to,
     subject: "Tu prueba gratuita de BookMe ha terminado",
