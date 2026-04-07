@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAppointments } from "@/hooks/use-appointments";
 import { useScheduleBlocks } from "@/hooks/use-schedule-blocks";
+import { useScheduleConfig } from "@/hooks/use-schedule-config";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -43,6 +44,7 @@ export default function AgendaPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const { appointments, loading, fetchAppointments, updateAppointment } = useAppointments();
   const { blocks, fetchBlocks, createBlock, deleteBlock } = useScheduleBlocks();
+  const { config: scheduleConfig, workingHours, fetchScheduleConfig } = useScheduleConfig();
 
   // Modal de turno seleccionado
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithRelations | null>(null);
@@ -73,6 +75,11 @@ export default function AgendaPage() {
       }),
     [currentDate]
   );
+
+  // Cargar configuración de agenda al montar
+  useEffect(() => {
+    fetchScheduleConfig();
+  }, [fetchScheduleConfig]);
 
   // Cargar datos al cambiar rango
   useEffect(() => {
@@ -249,6 +256,8 @@ export default function AgendaPage() {
             weekDays={weekDays}
             appointments={appointments}
             blocks={blocks}
+            scheduleConfig={scheduleConfig}
+            workingHours={workingHours}
             onAppointmentClick={handleAppointmentClick}
             onSlotClick={handleSlotClick}
             onAppointmentDrop={handleAppointmentDrop}
