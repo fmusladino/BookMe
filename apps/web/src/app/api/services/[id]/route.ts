@@ -10,6 +10,7 @@ const updateServiceSchema = z.object({
   price: z.number().min(0).optional().nullable(),
   show_price: z.boolean().optional(),
   is_active: z.boolean().optional(),
+  modality: z.enum(["presencial", "virtual", "both"]).optional(),
 });
 
 /**

@@ -54,7 +54,7 @@ export const WeekView = memo(function WeekView({
     []
   );
 
-  // Calcular disponibilidad por día y hora
+  // Calcular disponibilidad por dia y hora
   // Retorna un Map<"yyyy-MM-dd", Set<number>> donde el Set contiene las horas disponibles
   const availabilityByDay = useMemo(() => {
     const map = new Map<string, Set<number>>();
@@ -64,7 +64,7 @@ export const WeekView = memo(function WeekView({
       const dayKey = format(day, "yyyy-MM-dd");
       const dayOfWeek = getDay(day); // 0=Dom, 1=Lun, etc.
 
-      // Verificar si es día laboral
+      // Verificar si es dia laboral
       if (!scheduleConfig.working_days.includes(dayOfWeek)) {
         map.set(dayKey, new Set());
         continue;
@@ -78,20 +78,18 @@ export const WeekView = memo(function WeekView({
         }
       }
 
-      // Obtener horarios laborales para este día
+      // Obtener horarios laborales para este dia
       const dayWorkingHours = workingHours.filter((wh) => wh.day_of_week === dayOfWeek);
       const availableHours = new Set<number>();
 
       for (const wh of dayWorkingHours) {
         const startHour = parseInt(wh.start_time.split(":")[0] ?? "0", 10);
         const endHour = parseInt(wh.end_time.split(":")[0] ?? "0", 10);
-        // Si los minutos de fin son > 0, esa hora también es parcialmente disponible
         const endMinutes = parseInt(wh.end_time.split(":")[1] ?? "0", 10);
 
         for (let h = startHour; h < endHour; h++) {
           availableHours.add(h);
         }
-        // Si la hora de fin tiene minutos, agregar esa hora parcial
         if (endMinutes > 0) {
           availableHours.add(endHour);
         }
@@ -112,7 +110,7 @@ export const WeekView = memo(function WeekView({
     return map;
   }, [weekDays, scheduleConfig, workingHours]);
 
-  // Agrupar turnos por día
+  // Agrupar turnos por dia
   const appointmentsByDay = useMemo(() => {
     const map = new Map<string, AppointmentWithRelations[]>();
     for (const day of weekDays) {
@@ -125,7 +123,7 @@ export const WeekView = memo(function WeekView({
     return map;
   }, [weekDays, appointments]);
 
-  // Agrupar bloqueos por día
+  // Agrupar bloqueos por dia
   const blocksByDay = useMemo(() => {
     const map = new Map<string, ScheduleBlock[]>();
     for (const day of weekDays) {
@@ -160,10 +158,9 @@ export const WeekView = memo(function WeekView({
     e.preventDefault();
     if (!dragRef.current) return;
 
-    // Calcular posición Y relativa al slot para determinar minutos
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const relY = e.clientY - rect.top;
-    const minuteOffset = Math.round((relY / SLOT_HEIGHT) * 60 / 15) * 15; // Snap a 15 min
+    const minuteOffset = Math.round((relY / SLOT_HEIGHT) * 60 / 15) * 15;
 
     const newStart = new Date(day);
     newStart.setHours(hour, minuteOffset, 0, 0);
@@ -187,7 +184,7 @@ export const WeekView = memo(function WeekView({
   return (
     <div className="overflow-x-auto rounded-lg border bg-card">
       <div className="min-w-[800px]">
-        {/* Header: días de la semana */}
+        {/* Header: dias de la semana */}
         <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b bg-muted/30">
           <div className="p-2" />
           {weekDays.map((day) => (
@@ -230,7 +227,7 @@ export const WeekView = memo(function WeekView({
             ))}
           </div>
 
-          {/* Columnas de días */}
+          {/* Columnas de dias */}
           {weekDays.map((day) => {
             const dayKey = format(day, "yyyy-MM-dd");
             const dayAppointments = appointmentsByDay.get(dayKey) ?? [];
@@ -254,9 +251,9 @@ export const WeekView = memo(function WeekView({
                       className={cn(
                         "h-[60px] border-b border-dashed transition-colors cursor-pointer group",
                         isAvailable
-                          ? "bg-emerald-50 border-emerald-200/60 hover:bg-emerald-100/80 dark:bg-emerald-950/20 dark:border-emerald-800/40 dark:hover:bg-emerald-900/30"
+                          ? "bg-emerald-100/70 border-emerald-300/60 hover:bg-emerald-200/80 dark:bg-emerald-900/40 dark:border-emerald-700/50 dark:hover:bg-emerald-800/50"
                           : isUnavailable
-                            ? "bg-gray-50/50 border-border/30 hover:bg-gray-100/50 dark:bg-gray-900/20 dark:border-gray-800/30 dark:hover:bg-gray-800/30"
+                            ? "bg-gray-100/40 border-gray-200/30 hover:bg-gray-200/50 dark:bg-gray-800/30 dark:border-gray-700/30 dark:hover:bg-gray-700/30"
                             : "border-border/50 hover:bg-accent/50"
                       )}
                       onClick={() => {

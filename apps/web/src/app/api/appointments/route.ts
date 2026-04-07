@@ -28,6 +28,8 @@ const createAppointmentSchema = z.object({
   ends_at: isoDateString,
   notes: z.string().max(500).optional().nullable(),
   status: z.string().optional(), // ignorado, el API siempre usa "confirmed"
+  modality: z.enum(["presencial", "virtual"]).optional().default("presencial"),
+  meet_url: z.string().url().optional().nullable(),
 });
 
 // GET /api/appointments — Turnos del profesional autenticado (rango opcional)

@@ -7,6 +7,7 @@ const createServiceSchema = z.object({
   duration_minutes: z.number().min(5).max(480),
   price: z.number().min(0).optional(),
   show_price: z.boolean().optional(),
+  modality: z.enum(["presencial", "virtual", "both"]).optional().default("presencial"),
   line: z.enum(["healthcare", "business"]),
 });
 
