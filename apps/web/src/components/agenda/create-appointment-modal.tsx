@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, AlertCircle } from "lucide-react";
+import { Plus, Search, AlertCircle, Video, MapPin, ExternalLink } from "lucide-react";
 import type { Patient, Service } from "@/types";
 
 interface CreateAppointmentModalProps {
@@ -34,6 +34,8 @@ export function CreateAppointmentModal({
   const [showPatientSearch, setShowPatientSearch] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
 
+  const [defaultMeetUrl, setDefaultMeetUrl] = useState("");
+
   // Formulario
   const [formData, setFormData] = useState({
     patientId: "",
@@ -42,6 +44,7 @@ export function CreateAppointmentModal({
     startTime: "",
     endTime: "",
     notes: "",
+    modality: "presencial" as "presencial" | "virtual",
   });
 
   // Inicializar fecha y hora cuando cambia el modal
@@ -57,26 +60,40 @@ export function CreateAppointmentModal({
     }
   }, [open, initialDate, initialTime]);
 
-  // Auto-calcular hora de fin basado en la duración del servicio
+  // Auto-calcular hora de fin y modalidad basado en el servicio
   useEffect(() => {
-    if (formData.serviceId && formData.startTime) {
+    if (formData.serviceId) {
       const selectedService = services.find((s) => s.id === formData.serviceId);
-      if (selectedService && selectedService.duration_minutes) {
-        const [hours, minutes] = formData.startTime.split(":").map(Number);
-        const startDate = new Date();
-        startDate.setHours(hours, minutes, 0, 0);
-        const endDate = addMinutes(startDate, selectedService.duration_minutes);
-        const endTime = format(endDate, "HH:mm");
-        setFormData((prev) => ({ ...prev, endTime }));
+      if (selectedService) {
+        // Auto-set modality del servicio (si es "both", dejar la actual)
+        if ((selectedService as any).modality === "presencial" || (selectedService as any).modality === "virtual") {
+          setFormData((prev) => ({ ...prev, modality: (selectedService as any).modality }));
+        }
+        // Auto-calcular hora de fin
+        if (formData.startTime && selectedService.duration_minutes) {
+          const [hours, minutes] = formData.startTime.split(":").map(Number);
+          const startDate = new Date();
+          startDate.setHours(hours, minutes, 0, 0);
+          const endDate = addMinutes(startDate, selectedService.duration_minutes);
+          const endTime = format(endDate, "HH:mm");
+          setFormData((prev) => ({ ...prev, endTime }));
+        }
       }
     }
   }, [formData.serviceId, formData.startTime, services]);
 
-  // Cargar pacientes al abrir el modal
+  // Cargar pacientes, servicios y meet URL al abrir el modal
   useEffect(() => {
     if (open) {
       fetchPatients();
       fetchServices();
+      // Cargar meet URL del profesional
+      fetch("/api/professionals/me/visibility")
+        .then((r) => r.json())
+        .then((data: { default_meet_url?: string | null }) => {
+          if (data.default_meet_url) setDefaultMeetUrl(data.default_meet_url);
+        })
+        .catch(() => {});
     }
   }, [open]);
 
@@ -151,6 +168,8 @@ export function CreateAppointmentModal({
           ends_at: endsAt,
           notes: formData.notes || null,
           status: "pending",
+          modality: formData.modality,
+          meet_url: formData.modality === "virtual" ? defaultMeetUrl || null : null,
         }),
       });
 
@@ -171,6 +190,7 @@ export function CreateAppointmentModal({
         startTime: "",
         endTime: "",
         notes: "",
+        modality: "presencial",
       });
     } catch (error) {
       console.error("Error al crear turno:", error);
@@ -282,6 +302,54 @@ export function CreateAppointmentModal({
               </p>
             )}
           </div>
+          </div>
+
+          {/* Modalidad */}
+          <div className="space-y-2">
+            <Label>Modalidad</Label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({ ...prev, modality: "presencial" }))}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  formData.modality === "presencial"
+                    ? "border-primary bg-primary/10 text-primary font-medium"
+                    : "border-border hover:bg-accent"
+                }`}
+              >
+                <MapPin className="h-4 w-4" />
+                Presencial
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({ ...prev, modality: "virtual" }))}
+                className={`flex-1 flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  formData.modality === "virtual"
+                    ? "border-blue-500 bg-blue-50 text-blue-700 font-medium dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-600"
+                    : "border-border hover:bg-accent"
+                }`}
+              >
+                <Video className="h-4 w-4" />
+                Virtual (Meet)
+              </button>
+            </div>
+            {formData.modality === "virtual" && defaultMeetUrl && (
+              <div className="flex items-center gap-2 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2">
+                <Video className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                <span className="text-xs text-blue-700 dark:text-blue-300 truncate flex-1">{defaultMeetUrl}</span>
+                <a href={defaultMeetUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            )}
+            {formData.modality === "virtual" && !defaultMeetUrl && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50/50 p-2 dark:border-amber-800 dark:bg-amber-900/20">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-500" />
+                <p className="text-xs text-amber-700 dark:text-amber-200">
+                  No tenés un link de Meet configurado. Podés configurarlo en Configuración.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Fila 2: Fecha y Horarios en 3 columnas */}

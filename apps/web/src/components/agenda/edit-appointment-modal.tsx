@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
-import { AlertCircle, Trash2, FileText } from "lucide-react";
+import { AlertCircle, Trash2, FileText, Video, MapPin, ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { AppointmentWithRelations } from "@/types";
 
@@ -174,19 +174,47 @@ export function EditAppointmentModal({
               </div>
             )}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => {
-              onOpenChange(false);
-              router.push(`/dashboard/pacientes/${appointment.patient_id}/historia-clinica`);
-            }}
-          >
-            <FileText className="h-4 w-4" />
-            Historia Clínica
-          </Button>
+          <div className="flex items-center gap-2">
+            {(appointment as any).modality === "virtual" && (
+              <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 gap-1">
+                <Video className="h-3 w-3" />
+                Virtual
+              </Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                onOpenChange(false);
+                router.push(`/dashboard/pacientes/${appointment.patient_id}/historia-clinica`);
+              }}
+            >
+              <FileText className="h-4 w-4" />
+              Historia Clínica
+            </Button>
+          </div>
         </div>
+
+        {/* Link de Google Meet */}
+        {(appointment as any).modality === "virtual" && (appointment as any).meet_url && (
+          <div className="flex items-center gap-3 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-4 py-3">
+            <Video className="h-5 w-5 text-blue-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Google Meet</p>
+              <p className="text-sm font-medium text-blue-700 dark:text-blue-300 truncate">{(appointment as any).meet_url}</p>
+            </div>
+            <a
+              href={(appointment as any).meet_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Unirse
+            </a>
+          </div>
+        )}
 
         {/* Contenido principal en 2 columnas */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">

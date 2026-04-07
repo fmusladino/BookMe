@@ -15,7 +15,7 @@ export async function GET() {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("professionals")
-      .select("is_visible")
+      .select("is_visible, default_meet_url")
       .eq("id", user.id)
       .single();
 
@@ -23,7 +23,7 @@ export async function GET() {
       return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
     }
 
-    return NextResponse.json({ is_visible: data.is_visible });
+    return NextResponse.json({ is_visible: data.is_visible, default_meet_url: data.default_meet_url ?? null });
   } catch {
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }

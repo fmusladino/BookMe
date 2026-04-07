@@ -127,11 +127,13 @@ export type Database = {
           data_retention_until: string | null;
           mp_subscription_id: string | null;
           mp_plan_id: string | null;
+          default_meet_url: string | null;
           created_at: string;
         };
         Insert: {
           id: string;
           clinic_id?: string | null;
+          default_meet_url?: string | null;
           line: LineOfBusiness;
           specialty: string;
           specialty_slug: string;
@@ -176,6 +178,7 @@ export type Database = {
           data_retention_until?: string | null;
           mp_subscription_id?: string | null;
           mp_plan_id?: string | null;
+          default_meet_url?: string | null;
         };
         Relationships: [];
       };
@@ -257,6 +260,7 @@ export type Database = {
           price: number | null;
           show_price: boolean;
           is_active: boolean;
+          modality: "presencial" | "virtual" | "both";
           line: LineOfBusiness;
           created_at: string;
         };
@@ -268,6 +272,7 @@ export type Database = {
           price?: number | null;
           show_price?: boolean;
           is_active?: boolean;
+          modality?: "presencial" | "virtual" | "both";
           line: LineOfBusiness;
           created_at?: string;
         };
@@ -278,6 +283,7 @@ export type Database = {
           price?: number | null;
           show_price?: boolean;
           is_active?: boolean;
+          modality?: "presencial" | "virtual" | "both";
           line?: LineOfBusiness;
         };
         Relationships: [];
@@ -370,6 +376,8 @@ export type Database = {
           starts_at: string;
           ends_at: string;
           status: AppointmentStatus;
+          modality: "presencial" | "virtual";
+          meet_url: string | null;
           booked_by: string | null;
           notes: string | null;
           reminder_sent: boolean;
@@ -386,6 +394,8 @@ export type Database = {
           starts_at: string;
           ends_at: string;
           status?: AppointmentStatus;
+          modality?: "presencial" | "virtual";
+          meet_url?: string | null;
           booked_by?: string | null;
           notes?: string | null;
           reminder_sent?: boolean;
@@ -401,6 +411,8 @@ export type Database = {
           starts_at?: string;
           ends_at?: string;
           status?: AppointmentStatus;
+          modality?: "presencial" | "virtual";
+          meet_url?: string | null;
           booked_by?: string | null;
           notes?: string | null;
           reminder_sent?: boolean;

@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff } from "lucide-react";
+import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 const DAYS = [
@@ -52,6 +52,9 @@ export default function ConfiguracionPage() {
   const [gcalLoading, setGcalLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [visibilityLoading, setVisibilityLoading] = useState(false);
+  const [defaultMeetUrl, setDefaultMeetUrl] = useState("");
+  const [meetUrlSaving, setMeetUrlSaving] = useState(false);
+  const [meetUrlCopied, setMeetUrlCopied] = useState(false);
   const searchParams = useSearchParams();
 
   const [config, setConfig] = useState<ScheduleConfigState>({
@@ -119,13 +122,16 @@ export default function ConfiguracionPage() {
     }
   }, []);
 
-  // Fetch visibility status
+  // Fetch visibility status and meet URL
   const fetchVisibility = useCallback(async () => {
     try {
       const res = await fetch("/api/professionals/me/visibility");
       if (res.ok) {
-        const data = await res.json() as { is_visible: boolean };
+        const data = await res.json() as { is_visible: boolean; default_meet_url?: string | null };
         setIsVisible(data.is_visible);
+        if (data.default_meet_url) {
+          setDefaultMeetUrl(data.default_meet_url);
+        }
       }
     } catch {
       // Silencioso
@@ -231,6 +237,31 @@ export default function ConfiguracionPage() {
       toast.error("Error al cambiar la visibilidad");
     } finally {
       setVisibilityLoading(false);
+    }
+  };
+
+  const handleSaveMeetUrl = async () => {
+    setMeetUrlSaving(true);
+    try {
+      const res = await fetch("/api/professionals/me/meet-url", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ default_meet_url: defaultMeetUrl || null }),
+      });
+      if (!res.ok) throw new Error("Error al guardar");
+      toast.success("Link de Google Meet guardado");
+    } catch {
+      toast.error("Error al guardar el link de Meet");
+    } finally {
+      setMeetUrlSaving(false);
+    }
+  };
+
+  const handleCopyMeetUrl = () => {
+    if (defaultMeetUrl) {
+      navigator.clipboard.writeText(defaultMeetUrl);
+      setMeetUrlCopied(true);
+      setTimeout(() => setMeetUrlCopied(false), 2000);
     }
   };
 
@@ -411,6 +442,68 @@ export default function ConfiguracionPage() {
               </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Google Meet */}
+      <Card className={defaultMeetUrl ? "border-green-300 dark:border-green-700" : ""}>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Video className="h-5 w-5 text-blue-500" />
+            <div className="flex-1">
+              <CardTitle className="text-lg">Google Meet</CardTitle>
+              <CardDescription>
+                Configurá tu link fijo de Google Meet para consultas virtuales. Se usará automáticamente en los turnos marcados como virtuales.
+              </CardDescription>
+            </div>
+            {defaultMeetUrl && (
+              <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                Configurado
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="meet-url">Link de Google Meet</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="meet-url"
+                  type="url"
+                  value={defaultMeetUrl}
+                  onChange={(e) => setDefaultMeetUrl(e.target.value)}
+                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  className="flex-1"
+                />
+                {defaultMeetUrl && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={handleCopyMeetUrl}
+                    title="Copiar link"
+                  >
+                    {meetUrlCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Podés crear tu sala en{" "}
+                <a href="https://meet.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                  meet.google.com
+                </a>
+                {" "}y pegar el link acá.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleSaveMeetUrl}
+              disabled={meetUrlSaving}
+            >
+              {meetUrlSaving ? "Guardando..." : "Guardar link de Meet"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

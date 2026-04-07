@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Clock, DollarSign, Trash2, Edit2 } from "lucide-react";
+import { Plus, Clock, DollarSign, Trash2, Edit2, Video, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ interface Service {
   price: number | null;
   show_price: boolean;
   is_active: boolean;
+  modality: "presencial" | "virtual" | "both";
   line: string;
   created_at: string;
 }
@@ -26,6 +27,7 @@ interface CreateServiceForm {
   duration_minutes: string;
   price: string;
   show_price: boolean;
+  modality: "presencial" | "virtual" | "both";
 }
 
 export default function ServiciosPage() {
@@ -39,6 +41,7 @@ export default function ServiciosPage() {
     duration_minutes: "30",
     price: "",
     show_price: false,
+    modality: "presencial",
   });
 
   const fetchServices = useCallback(async () => {
@@ -77,6 +80,7 @@ export default function ServiciosPage() {
             duration_minutes: parseInt(createForm.duration_minutes, 10),
             price: createForm.price ? parseFloat(createForm.price) : null,
             show_price: createForm.show_price,
+            modality: createForm.modality,
           }),
         });
 
@@ -95,6 +99,7 @@ export default function ServiciosPage() {
             duration_minutes: parseInt(createForm.duration_minutes, 10),
             price: createForm.price ? parseFloat(createForm.price) : null,
             show_price: createForm.show_price,
+            modality: createForm.modality,
             line: user?.professional?.line || "business",
           }),
         });
@@ -225,6 +230,16 @@ export default function ServiciosPage() {
                   <Clock className="h-4 w-4 flex-shrink-0" />
                   <span>{service.duration_minutes} minutos</span>
                 </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {service.modality === "virtual" ? (
+                    <Video className="h-4 w-4 flex-shrink-0 text-blue-500" />
+                  ) : service.modality === "both" ? (
+                    <><MapPin className="h-4 w-4 flex-shrink-0" /><span>/</span><Video className="h-4 w-4 flex-shrink-0 text-blue-500" /></>
+                  ) : (
+                    <MapPin className="h-4 w-4 flex-shrink-0" />
+                  )}
+                  <span>{service.modality === "presencial" ? "Presencial" : service.modality === "virtual" ? "Virtual" : "Presencial / Virtual"}</span>
+                </div>
                 {service.price !== null && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <DollarSign className="h-4 w-4 flex-shrink-0" />
@@ -254,6 +269,7 @@ export default function ServiciosPage() {
                       duration_minutes: String(service.duration_minutes),
                       price: service.price ? String(service.price) : "",
                       show_price: service.show_price,
+                      modality: service.modality || "presencial",
                     });
                     setCreateModalOpen(true);
                   }}
@@ -346,6 +362,31 @@ export default function ServiciosPage() {
                 </Label>
               </div>
             )}
+
+            <div className="space-y-2">
+              <Label htmlFor="modality">Modalidad</Label>
+              <div className="flex gap-2">
+                {[
+                  { value: "presencial", label: "Presencial", icon: MapPin },
+                  { value: "virtual", label: "Virtual", icon: Video },
+                  { value: "both", label: "Ambas", icon: null },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setCreateForm((f) => ({ ...f, modality: opt.value as "presencial" | "virtual" | "both" }))}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                      createForm.modality === opt.value
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    {opt.icon && <opt.icon className="h-4 w-4" />}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="flex gap-2 pt-4">
               <Button
