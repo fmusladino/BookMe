@@ -610,25 +610,55 @@ export function CreateAppointmentModal({
             )}
           </div>
 
-          {/* Servicio */}
+          {/* Servicio — filtrado por OS del paciente si tiene */}
           <div className="space-y-2">
             <Label htmlFor="service">Servicio *</Label>
-            <Select
-              id="service"
-              value={formData.serviceId}
-              onChange={(e) => setFormData((prev) => ({ ...prev, serviceId: e.target.value }))}
-              disabled={searchingServices}
-            >
-              <option value="">
-                {searchingServices ? "Cargando servicios..." : "Seleccionar servicio"}
-              </option>
-              {services.map((service) => (
-                <option key={service.id} value={service.id}>
-                  {service.name}
-                  {service.duration_minutes ? ` (${service.duration_minutes} min)` : ""}
-                </option>
-              ))}
-            </Select>
+            {(() => {
+              // Si el paciente tiene OS, filtrar servicios vinculados a esa OS
+              const svcWithInsurance = patientInsuranceId
+                ? services.filter((s: any) =>
+                    s.service_insurances?.some((si: any) => si.insurance_id === patientInsuranceId)
+                  )
+                : [];
+              const svcOther = patientInsuranceId
+                ? services.filter(
+                    (s: any) => !s.service_insurances?.some((si: any) => si.insurance_id === patientInsuranceId)
+                  )
+                : services;
+
+              return (
+                <Select
+                  id="service"
+                  value={formData.serviceId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, serviceId: e.target.value }))}
+                  disabled={searchingServices}
+                >
+                  <option value="">
+                    {searchingServices ? "Cargando servicios..." : "Seleccionar servicio"}
+                  </option>
+                  {patientInsuranceId && svcWithInsurance.length > 0 && (
+                    <optgroup label={`Servicios con ${profInsurances.find((i) => i.id === patientInsuranceId)?.name || "esta OS"}`}>
+                      {svcWithInsurance.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name}
+                          {service.duration_minutes ? ` (${service.duration_minutes} min)` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {svcOther.length > 0 && (
+                    <optgroup label={patientInsuranceId ? "Otros servicios" : "Servicios"}>
+                      {svcOther.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name}
+                          {service.duration_minutes ? ` (${service.duration_minutes} min)` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </Select>
+              );
+            })()}
             {selectedService && selectedService.price && (
               <p className="text-xs text-muted-foreground">
                 Precio: ${selectedService.price}
