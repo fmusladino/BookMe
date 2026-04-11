@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check, Building2, Loader2, X } from "lucide-react";
+import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check, Building2, Loader2, X, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { invalidateScheduleConfigGlobal } from "@/hooks/use-schedule-config";
 
@@ -24,6 +24,79 @@ const DAYS = [
 ];
 
 const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90];
+
+// Lista precargada de obras sociales y prepagas argentinas
+const INSURANCES_CATALOG = [
+  // Prepagas principales
+  "OSDE",
+  "Swiss Medical",
+  "Galeno",
+  "Medicus",
+  "Omint",
+  "Hospital Italiano",
+  "Hospital Alemán",
+  "Hospital Británico",
+  "Avalian (ex ACA Salud)",
+  "ACCORD Salud",
+  "Medifé",
+  "Sancor Salud",
+  "Prevención Salud",
+  "Jerárquicos Salud",
+  "Federada Salud",
+  "Sanitas Argentina",
+  "Fundación Favaloro",
+  "CEMIC",
+  "Docthos",
+  "Bristol Group",
+  "Hominis",
+  "Luis Pasteur",
+  "Mita Salud",
+  "Paraná Salud",
+  "Prana Salud",
+  "Staff Médico",
+  "UP! Salud",
+  "Vittal",
+  "William Hope",
+  // Obras sociales sindicales / nacionales
+  "OSECAC (Comercio)",
+  "OSPACA (Alimentación)",
+  "OSDOP (Docentes Privados)",
+  "OSUTHGRA (Gastronómicos)",
+  "OSPLAD (Docentes)",
+  "OSDE Binario",
+  "OSPEDYC (Entidades Deportivas)",
+  "OSPECON (Construcción)",
+  "OSPAT (Transporte Automotor)",
+  "OSPRERA (Rural)",
+  "OSMATA (SMATA - Mecánicos)",
+  "OSECAC",
+  "OSPEGAP",
+  "OSJERA",
+  "OSPJN (Poder Judicial)",
+  "OSDIPP",
+  "OSFATLYF (Luz y Fuerza)",
+  "OSPF (Farmacéuticos)",
+  "OSSEG (Seguros)",
+  "OSPE (Petroleros)",
+  "OSPIA (Publicidad)",
+  "UPCN Salud",
+  "Unión Personal",
+  // Provinciales / IOMA
+  "IOMA",
+  "IAPOS (Santa Fe)",
+  "IPROSS (Río Negro)",
+  "SEMPRE (Mendoza)",
+  "DOSEP (San Luis)",
+  "IPS (Misiones)",
+  "OSEP (Mendoza)",
+  "IOSCOR (Corrientes)",
+  // PAMI y estatales
+  "PAMI",
+  "Incluir Salud (ex PROFE)",
+  "DASPU (Universitarios)",
+  // Otras
+  "Particular (sin cobertura)",
+].sort((a, b) => a.localeCompare(b, "es"));
 
 interface WorkingHourRow {
   dayOfWeek: number;
@@ -70,6 +143,7 @@ export default function ConfiguracionPage() {
   const [insurancesLoading, setInsurancesLoading] = useState(false);
   const [newInsuranceName, setNewInsuranceName] = useState("");
   const [addingInsurance, setAddingInsurance] = useState(false);
+  const [insuranceSearch, setInsuranceSearch] = useState("");
   const searchParams = useSearchParams();
 
   const [config, setConfig] = useState<ScheduleConfigState>({
@@ -765,66 +839,176 @@ export default function ConfiguracionPage() {
             <div>
               <CardTitle>Obras Sociales / Prepagas</CardTitle>
               <CardDescription>
-                Agregá las obras sociales y prepagas con las que trabajás. Estas aparecerán en el módulo de Prestaciones.
+                Seleccioná las obras sociales y prepagas con las que trabajás. Estas aparecerán en Servicios y Prestaciones.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Agregar nueva */}
-          <div className="flex items-center gap-2">
+          {/* Seleccionadas actualmente */}
+          {profInsurances.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Seleccionadas ({profInsurances.length})
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {profInsurances.map((ins) => (
+                  <Badge
+                    key={ins.id}
+                    variant="secondary"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                  >
+                    {ins.name}
+                    <button
+                      onClick={() => handleRemoveInsurance(ins.id, ins.name)}
+                      className="ml-1 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive"
+                      title={`Quitar ${ins.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Buscador */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Nombre de la obra social (ej: OSDE, Galeno...)"
-              value={newInsuranceName}
-              onChange={(e) => setNewInsuranceName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAddInsurance();
-              }}
-              className="flex-1"
+              placeholder="Buscar obra social o prepaga..."
+              value={insuranceSearch}
+              onChange={(e) => setInsuranceSearch(e.target.value)}
+              className="pl-9"
             />
-            <Button
-              onClick={handleAddInsurance}
-              disabled={addingInsurance || !newInsuranceName.trim()}
-              size="sm"
-            >
-              {addingInsurance ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="mr-1 h-4 w-4" />
-              )}
-              Agregar
-            </Button>
           </div>
 
-          {/* Lista actual */}
+          {/* Lista precargada con checkboxes */}
           {insurancesLoading ? (
             <div className="flex items-center justify-center py-4 text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando...
             </div>
-          ) : profInsurances.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              No tenés obras sociales cargadas. Agregá una para empezar.
-            </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {profInsurances.map((ins) => (
-                <Badge
-                  key={ins.id}
-                  variant="secondary"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm"
-                >
-                  {ins.name}
-                  <button
-                    onClick={() => handleRemoveInsurance(ins.id, ins.name)}
-                    className="ml-1 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive"
-                    title={`Eliminar ${ins.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
+            <div className="border rounded-lg max-h-64 overflow-y-auto">
+              {(() => {
+                const profNames = new Set(profInsurances.map((p) => p.name.toLowerCase()));
+                const searchLower = insuranceSearch.toLowerCase();
+                const filtered = INSURANCES_CATALOG.filter((name) =>
+                  name.toLowerCase().includes(searchLower)
+                );
+
+                if (filtered.length === 0 && insuranceSearch.trim()) {
+                  return (
+                    <div className="p-4 text-center space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        No se encontró &quot;{insuranceSearch}&quot; en el listado
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setNewInsuranceName(insuranceSearch.trim());
+                          handleAddInsurance();
+                          setInsuranceSearch("");
+                        }}
+                        disabled={addingInsurance}
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Agregar &quot;{insuranceSearch.trim()}&quot; manualmente
+                      </Button>
+                    </div>
+                  );
+                }
+
+                return filtered.map((name) => {
+                  const isSelected = profNames.has(name.toLowerCase());
+                  return (
+                    <label
+                      key={name}
+                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b last:border-b-0 transition-colors ${
+                        isSelected
+                          ? "bg-emerald-50 dark:bg-emerald-950/20"
+                          : "hover:bg-accent"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={async () => {
+                          if (isSelected) {
+                            const ins = profInsurances.find(
+                              (p) => p.name.toLowerCase() === name.toLowerCase()
+                            );
+                            if (ins) await handleRemoveInsurance(ins.id, ins.name);
+                          } else {
+                            setNewInsuranceName(name);
+                            // Llamar directamente con el nombre
+                            setAddingInsurance(true);
+                            try {
+                              const res = await fetch("/api/professionals/me/insurances", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ name }),
+                              });
+                              if (res.ok) {
+                                toast.success(`"${name}" agregada`);
+                                fetchProfInsurances();
+                              } else {
+                                const data = await res.json() as { error?: string };
+                                toast.error(data.error ?? "Error al agregar");
+                              }
+                            } catch {
+                              toast.error("Error al agregar obra social");
+                            } finally {
+                              setAddingInsurance(false);
+                              setNewInsuranceName("");
+                            }
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className={`text-sm ${isSelected ? "font-medium text-emerald-700 dark:text-emerald-400" : ""}`}>
+                        {name}
+                      </span>
+                      {isSelected && (
+                        <Check className="ml-auto h-4 w-4 text-emerald-500" />
+                      )}
+                    </label>
+                  );
+                });
+              })()}
             </div>
           )}
+
+          {/* Agregar manualmente si no está en la lista */}
+          <div className="pt-2 border-t">
+            <p className="text-xs text-muted-foreground mb-2">
+              ¿No encontrás tu obra social? Agregala manualmente:
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Nombre de la obra social..."
+                value={newInsuranceName}
+                onChange={(e) => setNewInsuranceName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddInsurance();
+                }}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleAddInsurance}
+                disabled={addingInsurance || !newInsuranceName.trim()}
+                size="sm"
+              >
+                {addingInsurance ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-1 h-4 w-4" />
+                )}
+                Agregar
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
