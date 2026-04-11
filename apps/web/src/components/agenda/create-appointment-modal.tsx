@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, AlertCircle, Video, MapPin, ExternalLink, UserPlus, Loader2, ArrowLeft, ChevronLeft, ChevronRight, Calendar, ClipboardList, DollarSign } from "lucide-react";
+import { Plus, Search, AlertCircle, Video, MapPin, ExternalLink, UserPlus, Loader2, ArrowLeft, ChevronLeft, ChevronRight, Calendar, ClipboardList, DollarSign, Shield } from "lucide-react";
 import type { Patient, Service } from "@/types";
 import { useScheduleConfig } from "@/hooks/use-schedule-config";
 import { useSession } from "@/hooks/use-session";
@@ -55,6 +55,9 @@ export function CreateAppointmentModal({
 
   const [defaultMeetUrl, setDefaultMeetUrl] = useState("");
 
+  // Obras sociales del profesional
+  const [profInsurances, setProfInsurances] = useState<Array<{ id: string; name: string; code: string | null }>>([]);
+
   // Estado para el date picker custom
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMonth, setDatePickerMonth] = useState(new Date());
@@ -68,6 +71,8 @@ export function CreateAppointmentModal({
     dni: "",
     phone: "",
     email: "",
+    insurance_id: "",
+    insurance_number: "",
   });
 
   // Formulario
@@ -154,6 +159,15 @@ export function CreateAppointmentModal({
           if (data.default_meet_url) setDefaultMeetUrl(data.default_meet_url);
         })
         .catch(() => {});
+      // Cargar obras sociales del profesional
+      if (isHealthcare) {
+        fetch("/api/professionals/me/insurances")
+          .then((r) => r.json())
+          .then((data: { insurances: Array<{ id: string; name: string; code: string | null }> }) => {
+            setProfInsurances(data.insurances ?? []);
+          })
+          .catch(() => {});
+      }
     }
   }, [open]);
 
@@ -261,7 +275,9 @@ export function CreateAppointmentModal({
           dni: newPatientForm.dni,
           phone: newPatientForm.phone || null,
           email: newPatientForm.email || null,
-          is_particular: true,
+          insurance_id: newPatientForm.insurance_id || null,
+          insurance_number: newPatientForm.insurance_number || null,
+          is_particular: !newPatientForm.insurance_id,
         }),
       });
 
@@ -278,7 +294,7 @@ export function CreateAppointmentModal({
       setFormData((prev) => ({ ...prev, patientId: data.patient.id }));
 
       // Limpiar y cerrar el formulario de nuevo paciente
-      setNewPatientForm({ full_name: "", dni: "", phone: "", email: "" });
+      setNewPatientForm({ full_name: "", dni: "", phone: "", email: "", insurance_id: "", insurance_number: "" });
       setShowNewPatientForm(false);
       setShowPatientSearch(false);
       setPatientSearch("");
@@ -351,7 +367,7 @@ export function CreateAppointmentModal({
         modality: "presencial",
       });
       setShowNewPatientForm(false);
-      setNewPatientForm({ full_name: "", dni: "", phone: "", email: "" });
+      setNewPatientForm({ full_name: "", dni: "", phone: "", email: "", insurance_id: "", insurance_number: "" });
     } catch (error) {
       console.error("Error al crear turno:", error);
       toast.error(error instanceof Error ? error.message : "Error al crear turno");
@@ -419,6 +435,49 @@ export function CreateAppointmentModal({
                     onChange={(e) => setNewPatientForm((prev) => ({ ...prev, email: e.target.value }))}
                   />
                 </div>
+
+                {/* Obra social del paciente */}
+                {isHealthcare && (
+                  <div className="space-y-2 pt-1 border-t border-border/50">
+                    <Label className="flex items-center gap-1.5 text-xs font-medium">
+                      <Shield className="h-3.5 w-3.5 text-emerald-500" />
+                      Obra Social / Prepaga
+                    </Label>
+                    {profInsurances.length > 0 ? (
+                      <>
+                        <select
+                          value={newPatientForm.insurance_id}
+                          onChange={(e) => setNewPatientForm((prev) => ({ ...prev, insurance_id: e.target.value }))}
+                          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <option value="">Particular (sin obra social)</option>
+                          {profInsurances.map((ins) => (
+                            <option key={ins.id} value={ins.id}>
+                              {ins.name}
+                            </option>
+                          ))}
+                        </select>
+                        {newPatientForm.insurance_id && (
+                          <Input
+                            placeholder="N° de afiliado / plan *"
+                            value={newPatientForm.insurance_number}
+                            onChange={(e) => setNewPatientForm((prev) => ({ ...prev, insurance_number: e.target.value }))}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <div className="rounded-md border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-2">
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          No tenés obras sociales cargadas.{" "}
+                          <a href="/dashboard/configuracion" className="underline font-medium hover:text-amber-800 dark:hover:text-amber-300">
+                            Agregalas en Configuración
+                          </a>{" "}
+                          primero.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <Button
                   type="button"
                   size="sm"
@@ -440,19 +499,30 @@ export function CreateAppointmentModal({
                 </Button>
               </div>
             ) : selectedPatient ? (
-              <div className="flex items-center justify-between rounded-md border border-input bg-muted/30 px-3 py-2">
-                <span className="text-sm">{selectedPatient.full_name}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData((prev) => ({ ...prev, patientId: "" }));
-                    setPatientSearch("");
-                    setShowPatientSearch(false);
-                  }}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Cambiar
-                </button>
+              <div className="rounded-md border border-input bg-muted/30 px-3 py-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{selectedPatient.full_name}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => ({ ...prev, patientId: "" }));
+                      setPatientSearch("");
+                      setShowPatientSearch(false);
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+                {selectedPatient.insurance_id ? (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Shield className="h-3 w-3" />
+                    {profInsurances.find((i) => i.id === selectedPatient.insurance_id)?.name || "Obra social"}
+                    {selectedPatient.insurance_number && ` — N° ${selectedPatient.insurance_number}`}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Particular</p>
+                )}
               </div>
             ) : (
               <div className="relative">
