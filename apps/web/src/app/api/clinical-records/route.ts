@@ -236,11 +236,13 @@ export async function POST(request: NextRequest) {
     // Encriptar el contenido
     let encryptedData;
     try {
+      console.log("[CLINICAL-RECORDS POST] Encrypting content, length:", content.length);
       encryptedData = await encryptClinicalRecord(content);
+      console.log("[CLINICAL-RECORDS POST] Encryption OK, encrypted length:", encryptedData.contentEncrypted.length);
     } catch (encryptError) {
       console.error("Error encriptando historia clínica:", encryptError);
       return NextResponse.json(
-        { error: "Error al encriptar los datos" },
+        { error: "Error al encriptar los datos", details: encryptError instanceof Error ? encryptError.message : String(encryptError) },
         { status: 500 }
       );
     }
@@ -259,9 +261,9 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError || !record) {
-      console.error("Supabase error creating clinical_record:", insertError?.message);
+      console.error("Supabase error creating clinical_record:", insertError?.message, insertError);
       return NextResponse.json(
-        { error: "Error al crear la historia clínica" },
+        { error: "Error al crear la historia clínica", details: insertError?.message || "record is null", code: insertError?.code },
         { status: 500 }
       );
     }
