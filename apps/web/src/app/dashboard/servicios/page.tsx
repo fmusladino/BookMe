@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Clock, DollarSign, Trash2, Edit2, Video, MapPin, Building2, Shield } from "lucide-react";
+import { Plus, Clock, DollarSign, Trash2, Edit2, Video, MapPin, Building2, Shield, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
 
@@ -43,12 +44,15 @@ interface CreateServiceForm {
   insurance_ids: string[];
 }
 
+const DURATION_PRESETS = [15, 20, 30, 45, 60, 90, 120];
+
 export default function ServiciosPage() {
   const { user } = useSession();
   const isHealthcare = user?.professional?.line === "healthcare";
   const [services, setServices] = useState<Service[]>([]);
   const [insurances, setInsurances] = useState<Insurance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
 
@@ -77,9 +81,10 @@ export default function ServiciosPage() {
     }
   }, []);
 
+  // Usar endpoint de obras sociales del profesional en vez del global
   const fetchInsurances = useCallback(async () => {
     try {
-      const res = await fetch("/api/insurances");
+      const res = await fetch("/api/professionals/me/insurances");
       if (res.ok) {
         const data = (await res.json()) as { insurances: Insurance[] };
         setInsurances(data.insurances ?? []);
@@ -96,10 +101,11 @@ export default function ServiciosPage() {
 
   const handleCreateService = async () => {
     if (!createForm.name || !createForm.duration_minutes) {
-      toast.error("Por favor completa los campos requeridos");
+      toast.error("Por favor completá los campos requeridos");
       return;
     }
 
+    setSaving(true);
     try {
       if (editingService) {
         const res = await fetch(`/api/services/${editingService.id}`, {
@@ -150,6 +156,8 @@ export default function ServiciosPage() {
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : "Error al guardar servicio");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -187,8 +195,8 @@ export default function ServiciosPage() {
             Configurá los tipos de consulta y sus precios
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateModalOpen(true)}>
-          <Plus className="mr-1 h-3.5 w-3.5" />
+        <Button onClick={() => setCreateModalOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
           Nuevo servicio
         </Button>
       </div>
@@ -323,7 +331,7 @@ export default function ServiciosPage() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* ─── Create/Edit Modal (rediseñado, más grande) ──────── */}
       <Dialog
         open={createModalOpen}
         onOpenChange={(open) => {
@@ -334,133 +342,237 @@ export default function ServiciosPage() {
           }
         }}
       >
-        <DialogContent onClose={() => { setCreateModalOpen(false); setEditingService(null); }} className="sm:max-w-lg">
+        <DialogContent
+          onClose={() => { setCreateModalOpen(false); setEditingService(null); }}
+          className="sm:max-w-2xl"
+        >
           <DialogHeader>
-            <DialogTitle>{editingService ? "Editar Servicio" : "Nuevo Servicio"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              {editingService ? (
+                <><Edit2 className="h-5 w-5" /> Editar Servicio</>
+              ) : (
+                <><Plus className="h-5 w-5" /> Nuevo Servicio</>
+              )}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+
+          <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-1 pt-2">
+            {/* ── Nombre del servicio ─────────────────────────── */}
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre del Servicio *</Label>
+              <Label htmlFor="name" className="text-sm font-semibold">
+                Nombre del servicio *
+              </Label>
               <Input
                 id="name"
                 value={createForm.name}
                 onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Ej: Consulta general"
+                placeholder="Ej: Consulta general, Control mensual, Limpieza dental..."
+                className="h-11 text-base"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="duration">Duración (minutos) *</Label>
-              <Input
-                id="duration"
-                type="number"
-                min="5"
-                max="480"
-                value={createForm.duration_minutes}
-                onChange={(e) => setCreateForm((f) => ({ ...f, duration_minutes: e.target.value }))}
-                placeholder="30"
-              />
-            </div>
-
-            {/* Obras sociales / Prepagas (solo Healthcare) */}
-            {isHealthcare && insurances.length > 0 && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-                  Obras Sociales / Prepagas que aceptás
-                </Label>
-                <div className="rounded-md border border-input p-3 space-y-2 max-h-40 overflow-y-auto">
-                  {insurances.map((ins) => {
-                    const checked = createForm.insurance_ids.includes(ins.id);
-                    return (
-                      <label
-                        key={ins.id}
-                        className={`flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer transition-colors text-sm ${
-                          checked
-                            ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"
-                            : "hover:bg-muted"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleInsurance(ins.id)}
-                          className="rounded border-gray-300"
-                        />
-                        <span>{ins.name}</span>
-                        {ins.code && (
-                          <span className="text-xs text-muted-foreground">({ins.code})</span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-                {createForm.insurance_ids.length > 0 && (
-                  <p className="text-xs text-emerald-600">
-                    {createForm.insurance_ids.length} obra{createForm.insurance_ids.length !== 1 ? "s" : ""} social{createForm.insurance_ids.length !== 1 ? "es" : ""} seleccionada{createForm.insurance_ids.length !== 1 ? "s" : ""}
-                  </p>
-                )}
+            {/* ── Duración ───────────────────────────────────── */}
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Duración *</Label>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_PRESETS.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() =>
+                      setCreateForm((f) => ({ ...f, duration_minutes: String(d) }))
+                    }
+                    className={`rounded-lg border px-4 py-2.5 text-sm font-medium transition-all ${
+                      createForm.duration_minutes === String(d)
+                        ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+                        : "border-border hover:bg-accent hover:border-accent-foreground/20"
+                    }`}
+                  >
+                    {d} min
+                  </button>
+                ))}
               </div>
-            )}
-
-            {/* Precio particular */}
-            <div className="space-y-2">
-              <Label htmlFor="price">Precio particular (opcional)</Label>
-              <p className="text-xs text-muted-foreground">
-                Solo se aplica a consultas sin obra social
-              </p>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={createForm.price}
-                onChange={(e) => setCreateForm((f) => ({ ...f, price: e.target.value }))}
-                placeholder="0.00"
-              />
-            </div>
-
-            {createForm.price && Number(createForm.price) > 0 && (
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="show_price"
-                  checked={createForm.show_price}
-                  onCheckedChange={(checked) =>
-                    setCreateForm((f) => ({ ...f, show_price: checked }))
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Otra duración:</span>
+                <Input
+                  type="number"
+                  min="5"
+                  max="480"
+                  value={createForm.duration_minutes}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, duration_minutes: e.target.value }))
                   }
+                  className="w-24 h-9"
                 />
-                <Label htmlFor="show_price" className="font-normal cursor-pointer">
-                  Mostrar precio en la web pública
-                </Label>
+                <span className="text-xs text-muted-foreground">minutos</span>
               </div>
-            )}
+            </div>
 
-            <div className="space-y-2">
-              <Label>Modalidad</Label>
-              <div className="flex gap-2">
+            {/* ── Modalidad ──────────────────────────────────── */}
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Modalidad de atención</Label>
+              <div className="grid grid-cols-3 gap-3">
                 {[
-                  { value: "presencial", label: "Presencial", icon: MapPin },
-                  { value: "virtual", label: "Virtual", icon: Video },
-                  { value: "both", label: "Ambas", icon: null },
+                  { value: "presencial", label: "Presencial", icon: MapPin, desc: "En consultorio" },
+                  { value: "virtual", label: "Virtual", icon: Video, desc: "Videollamada" },
+                  { value: "both", label: "Ambas", icon: null, desc: "Presencial o virtual" },
                 ].map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setCreateForm((f) => ({ ...f, modality: opt.value as "presencial" | "virtual" | "both" }))}
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                    onClick={() =>
+                      setCreateForm((f) => ({
+                        ...f,
+                        modality: opt.value as "presencial" | "virtual" | "both",
+                      }))
+                    }
+                    className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-4 py-4 text-sm transition-all ${
                       createForm.modality === opt.value
-                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        ? "border-primary bg-primary/5 text-primary"
                         : "border-border hover:bg-accent"
                     }`}
                   >
-                    {opt.icon && <opt.icon className="h-4 w-4" />}
-                    {opt.label}
+                    {opt.icon ? (
+                      <opt.icon className="h-5 w-5" />
+                    ) : (
+                      <div className="flex gap-1">
+                        <MapPin className="h-4 w-4" />
+                        <Video className="h-4 w-4" />
+                      </div>
+                    )}
+                    <span className="font-medium">{opt.label}</span>
+                    <span className="text-[11px] text-muted-foreground">{opt.desc}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="flex gap-2 pt-4 border-t">
+            {/* ── Obras sociales (solo Healthcare) ───────────── */}
+            {isHealthcare && (
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2 text-sm font-semibold">
+                  <Shield className="h-4 w-4 text-emerald-500" />
+                  Obras Sociales / Prepagas que aceptás
+                </Label>
+
+                {insurances.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                          No tenés obras sociales cargadas
+                        </p>
+                        <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                          Agregá tus obras sociales desde{" "}
+                          <a
+                            href="/dashboard/configuracion"
+                            className="underline font-medium hover:text-amber-800 dark:hover:text-amber-300"
+                          >
+                            Configuración
+                          </a>{" "}
+                          para poder vincularlas a tus servicios.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {insurances.map((ins) => {
+                        const checked = createForm.insurance_ids.includes(ins.id);
+                        return (
+                          <label
+                            key={ins.id}
+                            className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 cursor-pointer transition-all ${
+                              checked
+                                ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400"
+                                : "border-border hover:bg-accent hover:border-accent-foreground/20"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleInsurance(ins.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            <div>
+                              <span className="text-sm font-medium">{ins.name}</span>
+                              {ins.code && (
+                                <span className="ml-1.5 text-xs text-muted-foreground">
+                                  ({ins.code})
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {createForm.insurance_ids.length > 0 && (
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                        {createForm.insurance_ids.length} obra
+                        {createForm.insurance_ids.length !== 1 ? "s" : ""} social
+                        {createForm.insurance_ids.length !== 1 ? "es" : ""} seleccionada
+                        {createForm.insurance_ids.length !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── Precio ─────────────────────────────────────── */}
+            <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="price" className="flex items-center gap-2 text-sm font-semibold">
+                  <DollarSign className="h-4 w-4 text-green-500" />
+                  Precio particular (opcional)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Se aplica a consultas sin obra social. Dejalo vacío si no querés especificar precio.
+                </p>
+                <div className="relative w-48">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                    $
+                  </span>
+                  <Input
+                    id="price"
+                    type="number"
+                    step="100"
+                    min="0"
+                    value={createForm.price}
+                    onChange={(e) =>
+                      setCreateForm((f) => ({ ...f, price: e.target.value }))
+                    }
+                    placeholder="0"
+                    className="pl-7 h-11 text-lg font-medium"
+                  />
+                </div>
+              </div>
+
+              {createForm.price && Number(createForm.price) > 0 && (
+                <div className="flex items-center gap-3 pt-2 border-t border-border">
+                  <Switch
+                    id="show_price"
+                    checked={createForm.show_price}
+                    onCheckedChange={(checked) =>
+                      setCreateForm((f) => ({ ...f, show_price: checked }))
+                    }
+                  />
+                  <Label htmlFor="show_price" className="font-normal cursor-pointer flex items-center gap-2">
+                    {createForm.show_price ? (
+                      <Eye className="h-4 w-4 text-blue-500" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    Mostrar precio en la web pública
+                  </Label>
+                </div>
+              )}
+            </div>
+
+            {/* ── Botones ────────────────────────────────────── */}
+            <div className="flex gap-3 pt-4 border-t sticky bottom-0 bg-background pb-1">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -468,12 +580,25 @@ export default function ServiciosPage() {
                   setEditingService(null);
                   setCreateForm(emptyForm);
                 }}
-                className="flex-1"
+                className="flex-1 h-11"
               >
                 Cancelar
               </Button>
-              <Button onClick={handleCreateService} className="flex-1">
-                {editingService ? "Actualizar" : "Crear"}
+              <Button
+                onClick={handleCreateService}
+                disabled={saving || !createForm.name || !createForm.duration_minutes}
+                className="flex-1 h-11"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : editingService ? (
+                  "Actualizar servicio"
+                ) : (
+                  "Crear servicio"
+                )}
               </Button>
             </div>
           </div>
