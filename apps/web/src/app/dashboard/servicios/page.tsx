@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Clock, DollarSign, Trash2, Edit2, Video, MapPin, Building2, Shield, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Clock, DollarSign, Trash2, Edit2, Video, MapPin, Shield, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
 
@@ -25,6 +24,7 @@ interface ServiceInsurance {
 interface Service {
   id: string;
   name: string;
+  description: string | null;
   duration_minutes: number;
   price: number | null;
   show_price: boolean;
@@ -37,6 +37,7 @@ interface Service {
 
 interface CreateServiceForm {
   name: string;
+  description: string;
   duration_minutes: string;
   price: string;
   show_price: boolean;
@@ -58,6 +59,7 @@ export default function ServiciosPage() {
 
   const emptyForm: CreateServiceForm = {
     name: "",
+    description: "",
     duration_minutes: "30",
     price: "",
     show_price: false,
@@ -113,6 +115,7 @@ export default function ServiciosPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: createForm.name,
+            description: createForm.description || null,
             duration_minutes: parseInt(createForm.duration_minutes, 10),
             price: createForm.price ? parseFloat(createForm.price) : null,
             show_price: createForm.show_price,
@@ -129,6 +132,7 @@ export default function ServiciosPage() {
       } else {
         const payload = {
           name: createForm.name,
+          description: createForm.description || null,
           duration_minutes: parseInt(createForm.duration_minutes, 10),
           price: createForm.price ? parseFloat(createForm.price) : undefined,
           show_price: createForm.show_price,
@@ -230,6 +234,11 @@ export default function ServiciosPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 space-y-1">
                     <h3 className="font-semibold text-foreground">{service.name}</h3>
+                    {service.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {service.description}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       Creado el {new Date(service.created_at).toLocaleDateString("es-AR")}
                     </p>
@@ -302,6 +311,7 @@ export default function ServiciosPage() {
                       setEditingService(service);
                       setCreateForm({
                         name: service.name,
+                        description: service.description || "",
                         duration_minutes: String(service.duration_minutes),
                         price: service.price ? String(service.price) : "",
                         show_price: service.show_price,
@@ -369,6 +379,25 @@ export default function ServiciosPage() {
                 placeholder="Ej: Consulta general, Control mensual, Limpieza dental..."
                 className="h-11 text-base"
               />
+            </div>
+
+            {/* ── Descripción ───────────────────────────────── */}
+            <div className="space-y-2">
+              <Label htmlFor="description" className="text-sm font-semibold">
+                Descripción
+              </Label>
+              <textarea
+                id="description"
+                value={createForm.description}
+                onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Describí brevemente en qué consiste este servicio..."
+                maxLength={500}
+                rows={3}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+              />
+              <p className="text-xs text-muted-foreground text-right">
+                {createForm.description.length}/500
+              </p>
             </div>
 
             {/* ── Duración ───────────────────────────────────── */}
@@ -521,52 +550,89 @@ export default function ServiciosPage() {
               </div>
             )}
 
-            {/* ── Precio ─────────────────────────────────────── */}
-            <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="price" className="flex items-center gap-2 text-sm font-semibold">
-                  <DollarSign className="h-4 w-4 text-green-500" />
-                  Precio particular (opcional)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Se aplica a consultas sin obra social. Dejalo vacío si no querés especificar precio.
-                </p>
-                <div className="relative w-48">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
-                    $
-                  </span>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="100"
-                    min="0"
-                    value={createForm.price}
-                    onChange={(e) =>
-                      setCreateForm((f) => ({ ...f, price: e.target.value }))
-                    }
-                    placeholder="0"
-                    className="pl-7 h-11 text-lg font-medium"
-                  />
+            {/* ── Precios ────────────────────────────────────── */}
+            <div className="space-y-4">
+              <Label className="flex items-center gap-2 text-sm font-semibold">
+                <DollarSign className="h-4 w-4 text-green-500" />
+                Precios
+              </Label>
+
+              {/* Precio particular */}
+              <div className="rounded-xl border bg-muted/30 p-4 space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Precio particular</p>
+                  <p className="text-xs text-muted-foreground">
+                    Este es el precio para pacientes sin obra social.
+                  </p>
+                  <div className="relative w-48">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                      $
+                    </span>
+                    <Input
+                      id="price"
+                      type="number"
+                      step="100"
+                      min="0"
+                      value={createForm.price}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, price: e.target.value }))
+                      }
+                      placeholder="0"
+                      className="pl-7 h-11 text-lg font-medium"
+                    />
+                  </div>
                 </div>
+
+                {createForm.price && Number(createForm.price) > 0 && (
+                  <div className="flex items-center gap-3 pt-3 border-t border-border">
+                    <Switch
+                      id="show_price"
+                      checked={createForm.show_price}
+                      onCheckedChange={(checked) =>
+                        setCreateForm((f) => ({ ...f, show_price: checked }))
+                      }
+                    />
+                    <Label htmlFor="show_price" className="font-normal cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        {createForm.show_price ? (
+                          <Eye className="h-4 w-4 text-blue-500" />
+                        ) : (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        )}
+                        <span>¿Querés que el precio se vea en el portal?</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 ml-6">
+                        {createForm.show_price
+                          ? "El precio será visible para los pacientes al reservar"
+                          : "El precio no se muestra a los pacientes (solo uso interno)"}
+                      </p>
+                    </Label>
+                  </div>
+                )}
               </div>
 
-              {createForm.price && Number(createForm.price) > 0 && (
-                <div className="flex items-center gap-3 pt-2 border-t border-border">
-                  <Switch
-                    id="show_price"
-                    checked={createForm.show_price}
-                    onCheckedChange={(checked) =>
-                      setCreateForm((f) => ({ ...f, show_price: checked }))
-                    }
-                  />
-                  <Label htmlFor="show_price" className="font-normal cursor-pointer flex items-center gap-2">
-                    {createForm.show_price ? (
-                      <Eye className="h-4 w-4 text-blue-500" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    Mostrar precio en la web pública
-                  </Label>
+              {/* Info sobre precios de OS/Prepagas */}
+              {isHealthcare && createForm.insurance_ids.length > 0 && (
+                <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <Shield className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                        Precios de Obras Sociales / Prepagas
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">
+                        Los valores por obra social se cargan desde{" "}
+                        <a
+                          href="/dashboard/prestaciones"
+                          className="underline font-medium hover:text-blue-800 dark:hover:text-blue-300"
+                        >
+                          Prestaciones
+                        </a>
+                        . Esos precios son solo para tus estadísticas internas y{" "}
+                        <strong>nunca se muestran en el portal público</strong>.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

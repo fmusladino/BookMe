@@ -222,6 +222,7 @@ model Service {
   id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   professionalId  String         @map("professional_id") @db.Uuid
   name            String
+  description     String?
   durationMinutes Int            @default(30) @map("duration_minutes")
   price           Decimal?       @db.Decimal(10, 2)
   showPrice       Boolean        @default(false) @map("show_price")

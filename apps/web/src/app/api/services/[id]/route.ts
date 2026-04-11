@@ -6,6 +6,7 @@ import { z } from "zod";
 
 const updateServiceSchema = z.object({
   name: z.string().min(2).optional(),
+  description: z.string().max(500).optional().nullable(),
   duration_minutes: z.number().min(5).max(480).optional(),
   price: z.number().min(0).optional().nullable(),
   show_price: z.boolean().optional(),

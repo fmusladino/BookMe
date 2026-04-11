@@ -4,6 +4,7 @@ import { z } from "zod";
 
 const createServiceSchema = z.object({
   name: z.string().min(2, "Nombre requerido"),
+  description: z.string().max(500).optional().nullable(),
   duration_minutes: z.number().min(5).max(480),
   price: z.number().min(0).optional().nullable(),
   show_price: z.boolean().optional(),
