@@ -23,8 +23,8 @@ export async function GET() {
 
     const admin = createAdminClient();
 
-    // Obtener perfil, datos profesionales y si es owner/admin de clínica en paralelo
-    const [profileResult, proResult, clinicOwnerResult, clinicAdminResult] = await Promise.all([
+    // Obtener perfil, datos profesionales, court_owner y si es owner/admin de clínica en paralelo
+    const [profileResult, proResult, courtOwnerResult, clinicOwnerResult, clinicAdminResult] = await Promise.all([
       supabase
         .from("profiles")
         .select("id, role, full_name, avatar_url")
@@ -33,6 +33,12 @@ export async function GET() {
       supabase
         .from("professionals")
         .select("line, specialty, subscription_plan, subscription_status, trial_ends_at, public_slug")
+        .eq("id", user.id)
+        .maybeSingle(),
+      // Datos de dueño de canchas
+      supabase
+        .from("court_owners")
+        .select("id, business_name, slug, city, subscription_plan, subscription_status, trial_ends_at")
         .eq("id", user.id)
         .maybeSingle(),
       // ¿Es owner de alguna clínica?
@@ -57,22 +63,24 @@ export async function GET() {
     }
 
     const professional = profile.role === "professional" ? proResult.data : null;
+    const courtOwner = profile.role === "canchas" ? courtOwnerResult.data : null;
 
-    // Calcular días hasta fin del trial (antes lo hacía /api/subscription/status aparte)
+    // Calcular días hasta fin del trial
     let subscription = null;
-    if (professional) {
+    const subscriptionSource = professional ?? courtOwner;
+    if (subscriptionSource) {
       let daysUntilTrialEnd: number | null = null;
-      if (professional.trial_ends_at) {
+      if (subscriptionSource.trial_ends_at) {
         const now = new Date();
-        const trialEnd = new Date(professional.trial_ends_at);
+        const trialEnd = new Date(subscriptionSource.trial_ends_at);
         const diffMs = trialEnd.getTime() - now.getTime();
         daysUntilTrialEnd = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
       }
 
       subscription = {
-        plan: professional.subscription_plan || "free",
-        status: professional.subscription_status || "trialing",
-        trialEndsAt: professional.trial_ends_at,
+        plan: subscriptionSource.subscription_plan || "free",
+        status: subscriptionSource.subscription_status || "trialing",
+        trialEndsAt: subscriptionSource.trial_ends_at,
         daysUntilTrialEnd,
       };
     }
@@ -95,6 +103,16 @@ export async function GET() {
               plan: professional.subscription_plan,
               status: professional.subscription_status,
               slug: professional.public_slug,
+            }
+          : null,
+        // Datos del dueño de canchas
+        court_owner: courtOwner
+          ? {
+              business_name: courtOwner.business_name,
+              slug: courtOwner.slug,
+              city: courtOwner.city,
+              plan: courtOwner.subscription_plan,
+              status: courtOwner.subscription_status,
             }
           : null,
         // Datos de suscripción incluidos directamente

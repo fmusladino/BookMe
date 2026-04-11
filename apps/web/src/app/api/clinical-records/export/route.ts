@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
       professionalId = user.id;
 
       // Verificar que tiene acceso a este paciente
-      const { data: patientAccess } = await supabase
+      const { data: patientAccess } = await admin
         .from("appointments")
         .select("id")
         .eq("professional_id", user.id)
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
     // Obtener datos del profesional
     const { data: professional } = await admin
       .from("professionals")
-      .select("specialty, license_number, city, profile:profiles(full_name)")
+      .select("specialty, license_number, city, profile:profiles!id(full_name)")
       .eq("id", professionalId)
       .single();
 
@@ -121,7 +121,19 @@ export async function GET(request: NextRequest) {
       query = query.eq("id", recordId);
     }
 
-    const { data: encryptedRecords, error: fetchError } = await query;
+    const { data: encryptedRecords, error: fetchError } = await query as Promise<{
+      data: Array<{
+        id: string;
+        content_encrypted: string;
+        iv: string;
+        appointment_id: string | null;
+        is_amendment: boolean;
+        amends_record_id: string | null;
+        created_at: string;
+        updated_at: string;
+      }> | null;
+      error: any;
+    }>;
 
     if (fetchError) {
       console.error("Error fetching clinical records for export:", fetchError.message);

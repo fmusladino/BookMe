@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const professionalId = searchParams.get("professionalId");
     const date = searchParams.get("date");
+    console.log("[AVAILABLE-SLOTS] Request:", { professionalId, date });
     const serviceId = searchParams.get("serviceId");
     const durationParam = searchParams.get("duration");
 
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
 
     // Use admin client to bypass RLS (this is a public booking endpoint)
     const supabase = createAdminClient();
+    console.log("[AVAILABLE-SLOTS] Admin client created, SUPABASE_SERVICE_ROLE_KEY exists:", !!process.env["SUPABASE_SERVICE_ROLE_KEY"]);
 
     // Fetch professional's schedule configuration
     const { data: config, error: configError } = await supabase
@@ -67,6 +69,8 @@ export async function GET(request: NextRequest) {
       .select("*")
       .eq("professional_id", professionalId)
       .single();
+
+    console.log("[AVAILABLE-SLOTS] Config:", config ? "OK" : "NULL", configError?.message || "");
 
     if (configError || !config) {
       return NextResponse.json(
@@ -77,10 +81,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check vacation mode
-    if (config.vacation_mode && config.vacation_until) {
-      const vacationUntil = new Date(config.vacation_until);
-      if (targetDate <= vacationUntil) {
+    // Check vacation mode (desde/hasta)
+    if (config.vacation_mode) {
+      const vacFrom = config.vacation_from ? new Date(config.vacation_from) : null;
+      const vacUntil = config.vacation_until ? new Date(config.vacation_until) : null;
+      const isInVacation =
+        (!vacFrom && !vacUntil) ||
+        (!vacFrom && vacUntil && targetDate <= vacUntil) ||
+        (vacFrom && !vacUntil && targetDate >= vacFrom) ||
+        (vacFrom && vacUntil && targetDate >= vacFrom && targetDate <= vacUntil);
+      if (isInVacation) {
         return NextResponse.json({
           slots: [],
           meta: {
@@ -292,10 +302,11 @@ export async function GET(request: NextRequest) {
       },
     } as SlotsResponse);
   } catch (error) {
-    console.error("Error fetching available slots:", error);
+    console.error("[AVAILABLE-SLOTS] ERROR:", error);
     return NextResponse.json(
       {
         error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
     );

@@ -29,6 +29,9 @@ export async function GET(request: NextRequest) {
          bio,
          city,
          province,
+         country,
+         address,
+         postal_code,
          line,
          subscription_status`,
         { count: "exact" }
@@ -73,6 +76,7 @@ export async function GET(request: NextRequest) {
     // Obtener perfiles para enriquecer (query separada para evitar problemas de join)
     let profilesMap: Record<string, { id: string; full_name: string; avatar_url: string | null }> = {};
     let servicesCountMap: Record<string, number> = {};
+    let insurancesMap: Record<string, { id: string; name: string }[]> = {};
 
     if (allPros.length > 0) {
       const proIds = allPros.map((p) => p.id);
@@ -100,6 +104,65 @@ export async function GET(request: NextRequest) {
           servicesCountMap[s.professional_id] = (servicesCountMap[s.professional_id] || 0) + 1;
         }
       }
+
+      // Obtener obras sociales / prepagas por profesional
+      // Fuente 1: prestaciones (cada prestación tiene insurance_id)
+      try {
+        const { data: prestaciones } = await admin
+          .from("prestaciones")
+          .select("professional_id, insurance:insurances(id, name)")
+          .in("professional_id", proIds)
+          .eq("is_active", true);
+
+        if (prestaciones) {
+          for (const p of prestaciones) {
+            if (p.insurance) {
+              if (!insurancesMap[p.professional_id]) {
+                insurancesMap[p.professional_id] = [];
+              }
+              const ins = p.insurance as unknown as { id: string; name: string };
+              if (!insurancesMap[p.professional_id].find((i) => i.id === ins.id)) {
+                insurancesMap[p.professional_id].push(ins);
+              }
+            }
+          }
+        }
+      } catch {
+        // prestaciones table might not exist — skip
+      }
+
+      // Fuente 2: service_insurances (servicios vinculados a OS)
+      try {
+        const serviceIds = (services || []).map((s) => s.id);
+        if (serviceIds.length > 0) {
+          const { data: serviceInsurances } = await admin
+            .from("service_insurances")
+            .select("service_id, insurance:insurances(id, name)")
+            .in("service_id", serviceIds);
+
+          if (serviceInsurances) {
+            const serviceToProMap: Record<string, string> = {};
+            for (const s of services || []) {
+              serviceToProMap[s.id] = s.professional_id;
+            }
+
+            for (const si of serviceInsurances) {
+              const proId = serviceToProMap[si.service_id];
+              if (proId && si.insurance) {
+                if (!insurancesMap[proId]) {
+                  insurancesMap[proId] = [];
+                }
+                const ins = si.insurance as unknown as { id: string; name: string };
+                if (!insurancesMap[proId].find((i) => i.id === ins.id)) {
+                  insurancesMap[proId].push(ins);
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // service_insurances table might not exist — skip
+      }
     }
 
     const professionals = allPros.map((pro) => ({
@@ -110,9 +173,13 @@ export async function GET(request: NextRequest) {
       bio: pro.bio,
       city: pro.city,
       province: pro.province,
+      country: pro.country,
+      address: pro.address,
+      postal_code: pro.postal_code,
       line: pro.line,
       profile: profilesMap[pro.id] || { id: pro.id, full_name: "Profesional", avatar_url: null },
       services_count: servicesCountMap[pro.id] || 0,
+      insurances: insurancesMap[pro.id] || [],
     }));
 
     const totalPages = Math.ceil((count || 0) / limit);

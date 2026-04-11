@@ -145,6 +145,8 @@ model Professional {
   dataRetentionUntil    DateTime?          @map("data_retention_until") @db.Timestamptz(6)
   mpSubscriptionId      String?            @map("mp_subscription_id")
   mpPlanId              String?            @map("mp_plan_id")
+  onboardingCompleted   Boolean            @default(false) @map("onboarding_completed")
+  onboardingCompletedAt DateTime?          @map("onboarding_completed_at") @db.Timestamptz(6)
   createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
   profile        Profile          @relation(fields: [id], references: [id], onDelete: Cascade)
@@ -155,7 +157,8 @@ model Professional {
   services       Service[]
   patients       Patient[]
   appointments   Appointment[]
-  billingItems   BillingItem[]
+  billingItems           BillingItem[]
+  professionalInsurances ProfessionalInsurance[]
 
   @@map("professionals")
 }
@@ -167,10 +170,26 @@ model Insurance {
   logoUrl  String? @map("logo_url")
   isActive Boolean @default(true) @map("is_active")
 
-  patients     Patient[]
-  billingItems BillingItem[]
+  patients               Patient[]
+  billingItems           BillingItem[]
+  professionalInsurances ProfessionalInsurance[]
 
   @@map("insurances")
+}
+
+model ProfessionalInsurance {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  professionalId String   @map("professional_id") @db.Uuid
+  insuranceId    String   @map("insurance_id") @db.Uuid
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  insurance    Insurance    @relation(fields: [insuranceId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalId, insuranceId])
+  @@index([professionalId])
+  @@map("professional_insurances")
 }
 
 model Patient {

@@ -49,6 +49,7 @@ export async function PUT(request: NextRequest) {
       lunchBreakStart: string | null;
       lunchBreakEnd: string | null;
       vacationMode: boolean;
+      vacationFrom: string | null;
       vacationUntil: string | null;
     };
 
@@ -63,6 +64,7 @@ export async function PUT(request: NextRequest) {
           lunch_break_start: body.lunchBreakStart,
           lunch_break_end: body.lunchBreakEnd,
           vacation_mode: body.vacationMode,
+          vacation_from: body.vacationFrom,
           vacation_until: body.vacationUntil,
         },
         { onConflict: "professional_id" }

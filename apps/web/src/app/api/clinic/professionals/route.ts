@@ -79,7 +79,7 @@ export async function GET() {
       .select(
         `id, specialty, specialty_slug, city, province, is_visible,
          subscription_plan, subscription_status, created_at, branch_id,
-         profile:profiles(full_name, avatar_url, phone),
+         profile:profiles!id(full_name, avatar_url, phone),
          branch:clinic_branches(id, name, address, city)`
       )
       .or(

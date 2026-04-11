@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       // Buscar profesionales cuyo trial termina en esta fecha
       const { data, error } = await admin
         .from("professionals")
-        .select("id, line, subscription_plan, subscription_status, trial_ends_at, profile:profiles(full_name, email:id)")
+        .select("id, line, subscription_plan, subscription_status, trial_ends_at, profile:profiles!id(full_name, email:id)")
         .eq("subscription_status", "trialing")
         .gte("trial_ends_at", `${targetStr}T00:00:00`)
         .lt("trial_ends_at", `${targetStr}T23:59:59`);

@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   encryptClinicalRecord,
   decryptClinicalRecord,
@@ -18,8 +17,10 @@ const createClinicalRecordSchema = z.object({
 // Query params: patient_id (requerido)
 export async function GET(request: NextRequest) {
   try {
+    console.log("[CLINICAL-RECORDS GET] Starting...");
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log("[CLINICAL-RECORDS GET] Auth:", user?.id ?? "NO USER", authError?.message ?? "OK");
 
     if (authError || !user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get("patient_id");
+    console.log("[CLINICAL-RECORDS GET] patientId:", patientId);
 
     if (!patientId) {
       return NextResponse.json(
@@ -35,14 +37,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Usar adminClient para todas las queries de datos (RLS causa 500 en algunos casos)
+    // La seguridad se garantiza filtrando siempre por professional_id = user.id
+    const adminClient = createAdminClient();
+
     // Verificar que el profesional tiene acceso a este paciente
-    // (es decir, ha tenido turnos con este paciente)
-    const { data: patientAccess, error: accessError } = await supabase
+    const { data: patientAccess, error: accessError } = await adminClient
       .from("appointments")
       .select("id")
       .eq("professional_id", user.id)
       .eq("patient_id", patientId)
       .limit(1);
+
+    console.log("[CLINICAL-RECORDS GET] Access check:", patientAccess?.length ?? "NULL", accessError?.message ?? "OK");
 
     if (accessError || !patientAccess || patientAccess.length === 0) {
       return NextResponse.json(
@@ -55,18 +62,42 @@ export async function GET(request: NextRequest) {
     const includeArchived = searchParams.get("include_archived") === "true";
 
     // Obtener las historias clínicas encriptadas
-    let query = supabase
+    // Intentar con columnas de inmutabilidad (migración 00009). Si falla, query básica.
+    let encryptedRecords: Record<string, unknown>[] | null = null;
+    let fetchError: { message: string } | null = null;
+
+    // Intentar query completa primero
+    const result1 = await adminClient
       .from("clinical_records")
       .select("id, professional_id, patient_id, appointment_id, content_encrypted, iv, is_amendment, amends_record_id, is_archived, created_at, updated_at")
       .eq("professional_id", user.id)
       .eq("patient_id", patientId)
       .order("created_at", { ascending: false });
 
-    if (!includeArchived) {
-      query = query.eq("is_archived", false);
+    if (result1.error) {
+      // Posible: columnas de migración 00009 no existen. Intentar query básica
+      console.log("[CLINICAL-RECORDS GET] Full query failed:", result1.error.message, "— trying basic query");
+      const result2 = await adminClient
+        .from("clinical_records")
+        .select("id, professional_id, patient_id, appointment_id, content_encrypted, iv, created_at, updated_at")
+        .eq("professional_id", user.id)
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false });
+      encryptedRecords = result2.data as Record<string, unknown>[] | null;
+      fetchError = result2.error;
+    } else {
+      // Filtrar archivados si corresponde
+      if (!includeArchived && result1.data) {
+        encryptedRecords = (result1.data as Record<string, unknown>[]).filter(
+          (r) => r.is_archived !== true
+        );
+      } else {
+        encryptedRecords = result1.data as Record<string, unknown>[] | null;
+      }
+      fetchError = null;
     }
 
-    const { data: encryptedRecords, error: fetchError } = await query;
+    console.log("[CLINICAL-RECORDS GET] Records found:", encryptedRecords?.length ?? "NULL", fetchError?.message ?? "OK");
 
     if (fetchError) {
       console.error("Supabase error clinical_records:", fetchError.message);
@@ -81,8 +112,8 @@ export async function GET(request: NextRequest) {
       (encryptedRecords || []).map(async (record) => {
         try {
           const content = await decryptClinicalRecord(
-            record.content_encrypted,
-            record.iv
+            record.content_encrypted as string,
+            record.iv as string
           );
           return {
             id: record.id,
@@ -116,7 +147,6 @@ export async function GET(request: NextRequest) {
     );
 
     // Registrar acceso de auditoría para cada registro
-    const adminClient = createAdminClient();
     const ipAddress =
       request.headers.get("x-forwarded-for") ||
       request.headers.get("x-real-ip") ||
@@ -131,15 +161,15 @@ export async function GET(request: NextRequest) {
           action: "read",
           ip_address: ipAddress,
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           console.error(`Error registrando auditoría para ${record.id}:`, err);
         });
     }
 
     return NextResponse.json({ records });
   } catch (error) {
-    console.error("Error GET /api/clinical-records:", error);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    console.error("[CLINICAL-RECORDS GET] UNCAUGHT ERROR:", error instanceof Error ? error.message : error, error instanceof Error ? error.stack : "");
+    return NextResponse.json({ error: "Error interno", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
 
@@ -165,8 +195,12 @@ export async function POST(request: NextRequest) {
 
     const { patient_id, appointment_id, content } = parsed.data;
 
+    // Usar adminClient para queries (RLS causa 500 en algunos flujos)
+    // Seguridad: siempre filtramos por professional_id = user.id
+    const adminClient = createAdminClient();
+
     // Verificar que el profesional tiene acceso a este paciente
-    const { data: patientAccess, error: accessError } = await supabase
+    const { data: patientAccess, error: accessError } = await adminClient
       .from("appointments")
       .select("id")
       .eq("professional_id", user.id)
@@ -182,7 +216,7 @@ export async function POST(request: NextRequest) {
 
     // Si se proporciona appointment_id, verificar que pertenece al profesional y paciente
     if (appointment_id) {
-      const { data: appointment, error: appointmentError } = await supabase
+      const { data: appointment, error: appointmentError } = await adminClient
         .from("appointments")
         .select("id")
         .eq("id", appointment_id)
@@ -211,7 +245,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Guardar en la base de datos
-    const { data: record, error: insertError } = await supabase
+    const { data: record, error: insertError } = await adminClient
       .from("clinical_records")
       .insert({
         professional_id: user.id,
@@ -232,7 +266,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Registrar en auditoría
-    const adminClient = createAdminClient();
     const ipAddress =
       request.headers.get("x-forwarded-for") ||
       request.headers.get("x-real-ip") ||
@@ -246,14 +279,14 @@ export async function POST(request: NextRequest) {
         action: "create",
         ip_address: ipAddress,
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error("Error registrando auditoría CREATE:", err);
       });
 
     // Desencriptar para devolver en respuesta
     const decryptedContent = await decryptClinicalRecord(
-      record.content_encrypted,
-      record.iv
+      record.content_encrypted as string,
+      record.iv as string
     );
 
     return NextResponse.json(

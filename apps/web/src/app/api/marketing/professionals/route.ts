@@ -33,7 +33,7 @@ export async function GET() {
         .from("professionals")
         .select(
           `id, line, specialty, subscription_plan, subscription_status, created_at,
-           profile:profiles(full_name, avatar_url)`
+           profile:profiles!id(full_name, avatar_url)`
         ),
     ]);
 

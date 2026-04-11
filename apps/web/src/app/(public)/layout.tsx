@@ -1,13 +1,45 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { LogIn, HelpCircle } from 'lucide-react';
+import { LogIn, LogOut, HelpCircle, User } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export default function PublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, role')
+          .eq('id', data.user.id)
+          .single();
+        if (profile) {
+          setUser({ name: profile.full_name, role: profile.role });
+        }
+      }
+    };
+    checkAuth();
+  }, []);
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setUser(null);
+    window.location.href = '/login';
+  };
+
+  // Ruta home según rol
+  const homeRoute = user?.role === 'patient' ? '/mis-turnos' : user?.role === 'professional' ? '/dashboard' : '/';
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -33,13 +65,32 @@ export default function PublicLayout({
               <HelpCircle className="w-4 h-4" />
               Ayuda
             </Link>
-            <Link
-              href="/login"
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-bookme-navy dark:text-bookme-mint hover:bg-secondary dark:hover:bg-secondary rounded-md transition-colors"
-            >
-              <LogIn className="w-4 h-4" />
-              <span className="hidden sm:inline">Iniciar sesión</span>
-            </Link>
+            {user ? (
+              <>
+                <Link
+                  href={homeRoute}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary rounded-md transition-colors"
+                >
+                  <User className="w-4 h-4" />
+                  <span className="hidden sm:inline">{user.name}</span>
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Salir</span>
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-bookme-navy dark:text-bookme-mint hover:bg-secondary dark:hover:bg-secondary rounded-md transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                <span className="hidden sm:inline">Iniciar sesión</span>
+              </Link>
+            )}
           </div>
         </div>
       </header>

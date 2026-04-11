@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       .from("professionals")
       .select(
         `id, trial_ends_at, trial_email_sent,
-         profile:profiles(full_name)`
+         profile:profiles!id(full_name)`
       )
       .eq("subscription_status", "trialing")
       .not("trial_ends_at", "is", null);
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       .from("professionals")
       .select(
         `id, trial_ends_at, trial_email_sent,
-         profile:profiles(full_name)`
+         profile:profiles!id(full_name)`
       )
       .in("subscription_status", ["read_only", "cancelled"])
       .not("trial_ends_at", "is", null);

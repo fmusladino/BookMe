@@ -24,6 +24,7 @@ const isoDateString = z.string().refine(
 const createAppointmentSchema = z.object({
   patient_id: z.string().uuid("ID de paciente inválido"),
   service_id: z.string().uuid().optional(),
+  prestacion_id: z.string().uuid().optional().nullable(),
   starts_at: isoDateString,
   ends_at: isoDateString,
   notes: z.string().max(500).optional().nullable(),
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { patient_id, service_id, starts_at, ends_at, notes } = parsed.data;
+    const { patient_id, service_id, prestacion_id, starts_at, ends_at, notes } = parsed.data;
 
     // Validar reglas de negocio de la agenda
     const validationResult = await validateAppointmentSlot(
@@ -132,18 +133,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Construir datos del turno (incluir prestacion_id solo si viene)
+    const insertData: Record<string, unknown> = {
+      professional_id: user.id,
+      patient_id,
+      service_id,
+      starts_at,
+      ends_at,
+      notes,
+      booked_by: user.id,
+      status: "confirmed" as AppointmentStatus,
+    };
+    if (prestacion_id) {
+      insertData.prestacion_id = prestacion_id;
+    }
+
     const { data, error } = await supabase
       .from("appointments")
-      .insert({
-        professional_id: user.id,
-        patient_id,
-        service_id,
-        starts_at,
-        ends_at,
-        notes,
-        booked_by: user.id,
-        status: "confirmed" as AppointmentStatus,
-      })
+      .insert(insertData)
       .select()
       .single();
 

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { AppointmentWithRelations, ScheduleBlock } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import type { WorkingHour, ScheduleConfig } from "@/hooks/use-schedule-config";
+import { Clock, User, Phone, Video, MapPin, AlertCircle, XCircle } from "lucide-react";
 
 // Constantes de grilla
 const HOUR_START = 7;
@@ -14,13 +15,40 @@ const HOUR_END = 22;
 const SLOT_HEIGHT = 60; // px por hora
 const TOTAL_HOURS = HOUR_END - HOUR_START;
 
-// Colores de turnos ocupados — azul para todos los estados activos
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-blue-100 border-blue-400 text-blue-900 dark:bg-blue-900/40 dark:border-blue-600 dark:text-blue-100",
-  confirmed: "bg-blue-200 border-blue-500 text-blue-900 dark:bg-blue-800/50 dark:border-blue-500 dark:text-blue-100",
-  completed: "bg-blue-50 border-blue-300 text-blue-800 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-200",
-  cancelled: "bg-red-100 border-red-300 text-red-900 line-through dark:bg-red-900/30 dark:border-red-700 dark:text-red-200",
-  no_show: "bg-gray-100 border-gray-300 text-gray-900 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200",
+// ─── Estilos de turno por estado ─── inspirados en HisMe
+// Turnos activos: fondo verde/teal oscuro con borde izquierdo grueso
+// Cancelados: rojo, No se presentó: naranja/amber
+const STATUS_STYLES: Record<string, { card: string; border: string; badge: string; badgeText: string }> = {
+  pending: {
+    card: "bg-teal-50 dark:bg-teal-900/30",
+    border: "border-l-4 border-l-teal-500 border border-teal-200 dark:border-teal-700",
+    badge: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300",
+    badgeText: "Pendiente",
+  },
+  confirmed: {
+    card: "bg-emerald-50 dark:bg-emerald-900/30",
+    border: "border-l-4 border-l-emerald-500 border border-emerald-200 dark:border-emerald-700",
+    badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300",
+    badgeText: "Confirmado",
+  },
+  completed: {
+    card: "bg-sky-50 dark:bg-sky-900/20",
+    border: "border-l-4 border-l-sky-500 border border-sky-200 dark:border-sky-700",
+    badge: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300",
+    badgeText: "Completado",
+  },
+  cancelled: {
+    card: "bg-red-50/80 dark:bg-red-900/20",
+    border: "border-l-4 border-l-red-400 border border-red-200 dark:border-red-800",
+    badge: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
+    badgeText: "Cancelado",
+  },
+  no_show: {
+    card: "bg-rose-50 dark:bg-rose-900/20",
+    border: "border-l-4 border-l-rose-500 border border-rose-200 dark:border-rose-800",
+    badge: "bg-rose-200 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300",
+    badgeText: "No se presentó",
+  },
 };
 
 interface WeekViewProps {
@@ -55,30 +83,33 @@ export const WeekView = memo(function WeekView({
   );
 
   // Calcular disponibilidad por dia y hora
-  // Retorna un Map<"yyyy-MM-dd", Set<number>> donde el Set contiene las horas disponibles
   const availabilityByDay = useMemo(() => {
     const map = new Map<string, Set<number>>();
     if (!scheduleConfig || !workingHours || workingHours.length === 0) return map;
 
     for (const day of weekDays) {
       const dayKey = format(day, "yyyy-MM-dd");
-      const dayOfWeek = getDay(day); // 0=Dom, 1=Lun, etc.
+      const dayOfWeek = getDay(day);
 
-      // Verificar si es dia laboral
       if (!scheduleConfig.working_days.includes(dayOfWeek)) {
         map.set(dayKey, new Set());
         continue;
       }
 
-      // Verificar modo vacaciones
       if (scheduleConfig.vacation_mode) {
-        if (!scheduleConfig.vacation_until || new Date(scheduleConfig.vacation_until) >= day) {
+        const vacFrom = scheduleConfig.vacation_from ? new Date(scheduleConfig.vacation_from) : null;
+        const vacUntil = scheduleConfig.vacation_until ? new Date(scheduleConfig.vacation_until) : null;
+        const isInVacation =
+          (!vacFrom && !vacUntil) || // sin fechas = vacaciones indefinidas
+          (!vacFrom && vacUntil && day <= vacUntil) ||
+          (vacFrom && !vacUntil && day >= vacFrom) ||
+          (vacFrom && vacUntil && day >= vacFrom && day <= vacUntil);
+        if (isInVacation) {
           map.set(dayKey, new Set());
           continue;
         }
       }
 
-      // Obtener horarios laborales para este dia
       const dayWorkingHours = workingHours.filter((wh) => wh.day_of_week === dayOfWeek);
       const availableHours = new Set<number>();
 
@@ -95,7 +126,6 @@ export const WeekView = memo(function WeekView({
         }
       }
 
-      // Quitar horario de almuerzo
       if (scheduleConfig.lunch_break_start && scheduleConfig.lunch_break_end) {
         const lunchStart = parseInt(scheduleConfig.lunch_break_start.split(":")[0] ?? "0", 10);
         const lunchEnd = parseInt(scheduleConfig.lunch_break_end.split(":")[0] ?? "0", 10);
@@ -182,33 +212,44 @@ export const WeekView = memo(function WeekView({
   const isToday = (day: Date) => isSameDay(day, new Date());
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-card">
+    <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
       <div className="min-w-[800px]">
         {/* Header: dias de la semana */}
         <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b bg-muted/30">
           <div className="p-2" />
-          {weekDays.map((day) => (
-            <div
-              key={day.toISOString()}
-              className={cn(
-                "border-l p-2 text-center",
-                isToday(day) && "bg-primary/5"
-              )}
-            >
-              <p className="text-xs font-medium uppercase text-muted-foreground">
-                {format(day, "EEE", { locale: es })}
-              </p>
-              <p
+          {weekDays.map((day) => {
+            const dayKey = format(day, "yyyy-MM-dd");
+            const dayAvail = availabilityByDay.get(dayKey);
+            const isWorkDay = dayAvail ? dayAvail.size > 0 : true;
+
+            return (
+              <div
+                key={day.toISOString()}
                 className={cn(
-                  "text-lg font-bold",
-                  isToday(day) &&
-                    "inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                  "border-l p-2 text-center transition-colors",
+                  isToday(day) && "bg-primary/5",
+                  !isWorkDay && "bg-muted/50 opacity-60"
                 )}
               >
-                {format(day, "d")}
-              </p>
-            </div>
-          ))}
+                <p className={cn(
+                  "text-xs font-medium uppercase",
+                  isWorkDay ? "text-muted-foreground" : "text-muted-foreground/50"
+                )}>
+                  {format(day, "EEE", { locale: es })}
+                </p>
+                <p
+                  className={cn(
+                    "text-lg font-bold",
+                    isToday(day) &&
+                      "inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground",
+                    !isWorkDay && !isToday(day) && "text-muted-foreground/40"
+                  )}
+                >
+                  {format(day, "d")}
+                </p>
+              </div>
+            );
+          })}
         </div>
 
         {/* Grilla de horas */}
@@ -220,7 +261,7 @@ export const WeekView = memo(function WeekView({
                 key={hour}
                 className="flex h-[60px] items-start justify-end border-b pr-2 pt-0.5"
               >
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs font-medium text-muted-foreground">
                   {hour.toString().padStart(2, "0")}:00
                 </span>
               </div>
@@ -240,7 +281,7 @@ export const WeekView = memo(function WeekView({
                 key={day.toISOString()}
                 className={cn("relative border-l", isToday(day) && "bg-primary/[0.02]")}
               >
-                {/* Slots horarios (clickeables y droppables) */}
+                {/* Slots horarios */}
                 {hours.map((hour) => {
                   const isAvailable = hasConfig && dayAvailableHours ? dayAvailableHours.has(hour) : false;
                   const isUnavailable = hasConfig && !isAvailable;
@@ -249,12 +290,12 @@ export const WeekView = memo(function WeekView({
                     <div
                       key={hour}
                       className={cn(
-                        "h-[60px] border-b border-dashed transition-colors cursor-pointer group",
+                        "h-[60px] border-b transition-colors cursor-pointer group relative",
                         isAvailable
-                          ? "bg-emerald-100/70 border-emerald-300/60 hover:bg-emerald-200/80 dark:bg-emerald-900/40 dark:border-emerald-700/50 dark:hover:bg-emerald-800/50"
+                          ? "bg-emerald-50/80 border-emerald-200/40 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800/30 dark:hover:bg-emerald-900/40"
                           : isUnavailable
-                            ? "bg-gray-100/40 border-gray-200/30 hover:bg-gray-200/50 dark:bg-gray-800/30 dark:border-gray-700/30 dark:hover:bg-gray-700/30"
-                            : "border-border/50 hover:bg-accent/50"
+                            ? "bg-gray-100/60 border-gray-200/40 dark:bg-gray-900/40 dark:border-gray-800/30"
+                            : "border-border/30 hover:bg-accent/50"
                       )}
                       onClick={() => {
                         if (onEmptySlotClick) {
@@ -268,67 +309,129 @@ export const WeekView = memo(function WeekView({
                       onDrop={(e) => handleDrop(e, day, hour)}
                       onDragOver={handleDragOver}
                     >
-                      {/* Visual indicator for clickable slots */}
-                      <div className={cn(
-                        "h-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs pointer-events-none",
-                        isAvailable ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
-                      )}>
-                        +
-                      </div>
+                      {/* Indicador de disponible al hacer hover — estilo HisMe */}
+                      {isAvailable && (
+                        <div className="h-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                            Disponible
+                          </span>
+                        </div>
+                      )}
+                      {isUnavailable && (
+                        <div className="h-full flex items-center justify-center pointer-events-none">
+                          {/* Patrón de rayas diagonales sutiles para no-laborales */}
+                          <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.06]"
+                            style={{
+                              backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 5px, currentColor 5px, currentColor 6px)",
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
 
-                {/* Bloqueos */}
+                {/* Bloqueos — estilo mejorado */}
                 {dayBlocks.map((block) => {
                   const top = getTopOffset(block.starts_at);
                   const height = getHeight(block.starts_at, block.ends_at);
                   return (
                     <div
                       key={block.id}
-                      className="absolute left-0.5 right-0.5 rounded bg-muted/80 border border-dashed border-muted-foreground/30 z-10 flex items-center justify-center"
-                      style={{ top: `${top}px`, height: `${Math.max(height, 20)}px` }}
+                      className="absolute left-0.5 right-0.5 rounded-md z-10 flex items-center gap-1.5 px-2 bg-amber-50/90 border border-dashed border-amber-300 dark:bg-amber-900/30 dark:border-amber-700"
+                      style={{ top: `${top}px`, height: `${Math.max(height, 24)}px` }}
                     >
-                      <span className="text-[10px] text-muted-foreground truncate px-1">
-                        {block.reason ?? "Bloqueado"}
+                      <AlertCircle className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                      <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300 truncate">
+                        {block.reason ?? "Bloqueado por profesional"}
                       </span>
                     </div>
                   );
                 })}
 
-                {/* Turnos */}
+                {/* ─── Turnos — Cards estilo HisMe ─── */}
                 {dayAppointments.map((apt) => {
                   const top = getTopOffset(apt.starts_at);
                   const height = getHeight(apt.starts_at, apt.ends_at);
-                  const colorClass = STATUS_COLORS[apt.status] ?? STATUS_COLORS["pending"];
+                  const style = STATUS_STYLES[apt.status] ?? STATUS_STYLES["pending"];
+                  const isCancelled = apt.status === "cancelled";
+                  const isNoShow = apt.status === "no_show";
 
                   return (
                     <div
                       key={apt.id}
-                      draggable
+                      draggable={!isCancelled}
                       onDragStart={(e) => handleDragStart(e, apt)}
                       onClick={(e) => {
                         e.stopPropagation();
                         onAppointmentClick(apt);
                       }}
                       className={cn(
-                        "absolute left-1 right-1 z-20 cursor-grab overflow-hidden rounded border px-1.5 py-0.5 text-xs shadow-sm active:cursor-grabbing hover:shadow-md transition-shadow",
-                        colorClass
+                        "absolute left-1 right-1 z-20 cursor-grab overflow-hidden rounded-md shadow-sm active:cursor-grabbing hover:shadow-md transition-all",
+                        style.card,
+                        style.border,
+                        isCancelled && "opacity-60 cursor-pointer"
                       )}
                       style={{
                         top: `${top}px`,
-                        height: `${Math.max(height, 24)}px`,
+                        height: `${Math.max(height, 28)}px`,
                       }}
                     >
-                      <p className="font-medium truncate">{apt.patient.full_name}</p>
-                      {height >= 40 && (
-                        <p className="truncate opacity-75">
-                          {format(parseISO(apt.starts_at), "HH:mm")} - {format(parseISO(apt.ends_at), "HH:mm")}
-                        </p>
-                      )}
-                      {height >= 56 && apt.service && (
-                        <p className="truncate opacity-60">{apt.service.name}</p>
-                      )}
+                      <div className="px-2 py-1 h-full flex flex-col justify-between">
+                        {/* Fila superior: Nombre del paciente */}
+                        <div className="flex items-start justify-between gap-1">
+                          <p className={cn(
+                            "text-xs font-semibold truncate leading-tight text-foreground",
+                            isCancelled && "line-through opacity-70"
+                          )}>
+                            {apt.patient.full_name}
+                          </p>
+                          {/* Icono de modalidad */}
+                          {apt.modality === "virtual" ? (
+                            <Video className="h-3 w-3 flex-shrink-0 text-blue-500 mt-0.5" />
+                          ) : (
+                            <MapPin className="h-3 w-3 flex-shrink-0 text-muted-foreground/50 mt-0.5" />
+                          )}
+                        </div>
+
+                        {/* Fila media: Horario y servicio */}
+                        {height >= 38 && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Clock className="h-2.5 w-2.5 flex-shrink-0 text-muted-foreground/70" />
+                            <span className="text-[10px] text-muted-foreground font-medium">
+                              {format(parseISO(apt.starts_at), "HH:mm")} - {format(parseISO(apt.ends_at), "HH:mm")}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Servicio */}
+                        {height >= 52 && apt.service && (
+                          <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">
+                            {apt.service.name}
+                          </p>
+                        )}
+
+                        {/* Badge de estado — solo para estados especiales */}
+                        {height >= 48 && (isNoShow || isCancelled) && (
+                          <div className="mt-auto pt-0.5">
+                            <span className={cn(
+                              "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold",
+                              style.badge
+                            )}>
+                              {isNoShow && <XCircle className="h-2.5 w-2.5" />}
+                              {style.badgeText}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Teléfono — solo si hay mucho espacio */}
+                        {height >= 70 && apt.patient.phone && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <Phone className="h-2.5 w-2.5 flex-shrink-0 text-muted-foreground/50" />
+                            <span className="text-[9px] text-muted-foreground/70">{apt.patient.phone}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

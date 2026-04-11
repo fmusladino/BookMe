@@ -41,7 +41,7 @@ async function getClinicProfessionals(
 ) {
   const { data: profs } = await admin
     .from("professionals")
-    .select("id, specialty, branch_id, profile:profiles(full_name)")
+    .select("id, specialty, branch_id, profile:profiles!id(full_name)")
     .or(
       branchIds.length > 0
         ? `clinic_id.eq.${clinicId},branch_id.in.(${branchIds.join(",")})`

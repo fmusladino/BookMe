@@ -11,6 +11,7 @@ const updateServiceSchema = z.object({
   show_price: z.boolean().optional(),
   is_active: z.boolean().optional(),
   modality: z.enum(["presencial", "virtual", "both"]).optional(),
+  insurance_ids: z.array(z.string().uuid()).optional(),
 });
 
 /**
@@ -107,23 +108,57 @@ export async function PATCH(
       );
     }
 
-    const { data, error } = await supabase
-      .from("services")
-      .update(parsed.data)
-      .eq("id", id)
-      .eq("professional_id", user.id)
-      .select()
-      .single();
+    const { insurance_ids, ...serviceUpdates } = parsed.data;
 
-    if (error) {
-      console.error("Error updating service:", error.message);
-      return NextResponse.json(
-        { error: "Error al actualizar servicio" },
-        { status: 500 }
-      );
+    // Actualizar servicio (solo campos del servicio, sin insurance_ids)
+    const hasServiceUpdates = Object.keys(serviceUpdates).length > 0;
+    let serviceData = existing;
+
+    if (hasServiceUpdates) {
+      const { data, error } = await supabase
+        .from("services")
+        .update(serviceUpdates)
+        .eq("id", id)
+        .eq("professional_id", user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error updating service:", error.message);
+        return NextResponse.json(
+          { error: "Error al actualizar servicio" },
+          { status: 500 }
+        );
+      }
+      serviceData = data;
     }
 
-    return NextResponse.json({ service: data });
+    // Sync obras sociales si se enviaron
+    if (insurance_ids !== undefined) {
+      // Borrar todas las existentes
+      await supabase
+        .from("service_insurances")
+        .delete()
+        .eq("service_id", id);
+
+      // Insertar las nuevas
+      if (insurance_ids.length > 0) {
+        const rows = insurance_ids.map((ins_id) => ({
+          service_id: id,
+          insurance_id: ins_id,
+        }));
+        await supabase.from("service_insurances").insert(rows);
+      }
+    }
+
+    // Re-fetch completo con insurances
+    const { data: full } = await supabase
+      .from("services")
+      .select("*, service_insurances(insurance_id, insurance:insurances(id, name, code))")
+      .eq("id", id)
+      .single();
+
+    return NextResponse.json({ service: full || serviceData });
   } catch (error) {
     console.error("Error PATCH /api/services/[id]:", error);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
@@ -132,6 +167,8 @@ export async function PATCH(
 
 /**
  * DELETE /api/services/[id] — Eliminar un servicio
+ * Si tiene turnos asociados, hace soft-delete (is_active = false).
+ * Si no tiene turnos, intenta hard-delete; si falla por FK, hace soft-delete.
  */
 export async function DELETE(
   request: NextRequest,
@@ -167,18 +204,35 @@ export async function DELETE(
       );
     }
 
-    const { error } = await supabase
+    // Intentar hard-delete primero
+    const { error: deleteError } = await supabase
       .from("services")
       .delete()
       .eq("id", id)
       .eq("professional_id", user.id);
 
-    if (error) {
-      console.error("Error deleting service:", error.message);
-      return NextResponse.json(
-        { error: "Error al eliminar servicio" },
-        { status: 500 }
-      );
+    if (deleteError) {
+      // Si falla (FK constraint, RLS, etc.) → soft-delete
+      console.warn("Hard delete failed, trying soft delete:", deleteError.message);
+      const { error: softError } = await supabase
+        .from("services")
+        .update({ is_active: false })
+        .eq("id", id)
+        .eq("professional_id", user.id);
+
+      if (softError) {
+        console.error("Soft delete also failed:", softError.message);
+        return NextResponse.json(
+          { error: "Error al eliminar servicio" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        soft_deleted: true,
+        message: "Servicio desactivado (tiene turnos asociados)",
+      });
     }
 
     return NextResponse.json({ success: true });

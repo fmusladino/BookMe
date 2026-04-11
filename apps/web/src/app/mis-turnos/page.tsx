@@ -68,33 +68,20 @@ export default function MisTurnosPage() {
 
       if (profile) setUserName(profile.full_name);
 
-      // Obtener turnos del paciente
-      // Buscar primero los registros de paciente para este usuario
-      const { data: patientRecords } = await supabase
-        .from("patients")
-        .select("id, professional_id")
-        .eq("profile_id", user.id);
-
-      if (!patientRecords || patientRecords.length === 0) {
+      // Obtener turnos del paciente via API (admin client, sin problemas de RLS)
+      try {
+        const apptsRes = await fetch("/api/patient/appointments");
+        if (apptsRes.ok) {
+          const apptsData = await apptsRes.json();
+          setAppointments(apptsData.appointments ?? []);
+        } else {
+          console.error("[MIS-TURNOS] Error fetching appointments:", apptsRes.status);
+          setAppointments([]);
+        }
+      } catch (apptsErr) {
+        console.error("[MIS-TURNOS] Error fetching appointments:", apptsErr);
         setAppointments([]);
-        setLoading(false);
-        return;
       }
-
-      const patientIds = patientRecords.map((p) => p.id);
-
-      const { data: appts } = await supabase
-        .from("appointments")
-        .select(
-          `id, starts_at, ends_at, status, notes,
-           service:services(name, duration_minutes),
-           professional:professionals(specialty, city, public_slug, profile:profiles(full_name, avatar_url))`
-        )
-        .in("patient_id", patientIds)
-        .order("starts_at", { ascending: false })
-        .limit(50);
-
-      setAppointments((appts as unknown as Appointment[]) ?? []);
 
       // Obtener info de historia clínica via API (admin client, sin RLS)
       try {

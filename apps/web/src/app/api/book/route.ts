@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { AppointmentStatus } from "@/types";
 import { z } from "zod";
 import { validateAppointmentSlot } from "@/lib/schedule/validation";
@@ -23,20 +23,25 @@ const bookAppointmentSchema = z.object({
 // POST /api/book — Reservar turno como paciente autenticado
 export async function POST(request: NextRequest) {
   try {
+    console.log("[BOOK] ─── Inicio de reserva ───");
     const supabase = await createClient();
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
 
+    console.log("[BOOK] Auth:", user ? `OK (${user.id})` : "FAIL", authError?.message || "");
+
     if (authError || !user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
     const body = (await request.json()) as unknown;
+    console.log("[BOOK] Body recibido:", JSON.stringify(body));
     const parsed = bookAppointmentSchema.safeParse(body);
 
     if (!parsed.success) {
+      console.log("[BOOK] Validación fallida:", JSON.stringify(parsed.error.flatten()));
       return NextResponse.json(
         { error: "Datos inválidos", details: parsed.error.flatten() },
         { status: 400 }
@@ -44,16 +49,24 @@ export async function POST(request: NextRequest) {
     }
 
     const { professional_id, service_id, starts_at, ends_at, notes } = parsed.data;
+    console.log("[BOOK] Datos válidos:", { professional_id, service_id, starts_at, ends_at });
+
+    // Admin client para operaciones que necesitan bypassear RLS
+    // (el paciente autenticado no tiene permisos de INSERT en patients ni appointments)
+    const adminClient = createAdminClient();
+    console.log("[BOOK] Admin client creado OK");
 
     // Verificar que el usuario tiene rol de paciente
-    const { data: userProfile, error: profileError } = await supabase
+    const { data: userProfile, error: profileError } = await adminClient
       .from("profiles")
       .select("id, role, full_name, phone, dni")
       .eq("id", user.id)
       .single();
 
+    console.log("[BOOK] Profile result:", userProfile ? `OK (${userProfile.role})` : "NULL", profileError?.message || "");
+
     if (profileError || !userProfile) {
-      console.error("Error getting user profile:", profileError);
+      console.error("[BOOK] ERROR profile:", profileError);
       return NextResponse.json({ error: "Perfil de usuario no encontrado" }, { status: 404 });
     }
 
@@ -65,14 +78,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar que el profesional existe y está activo
-    const { data: professional, error: proError } = await supabase
+    const { data: professional, error: proError } = await adminClient
       .from("professionals")
       .select("id, subscription_status")
       .eq("id", professional_id)
       .single();
 
+    console.log("[BOOK] Professional result:", professional ? `OK (${professional.subscription_status})` : "NULL", proError?.message || "");
+
     if (proError || !professional) {
-      console.error("Error getting professional:", proError);
+      console.error("[BOOK] ERROR professional:", proError);
       return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
     }
 
@@ -83,13 +98,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar o crear registro de paciente para este profesional
-    const { data: existingPatient, error: patientError } = await supabase
+    // Buscar registro de paciente para este profesional
+    // Primero buscar por profile_id, luego por DNI (el profesional pudo haberlo creado manualmente)
+    let existingPatient: { id: string } | null = null;
+
+    const { data: byProfile } = await adminClient
       .from("patients")
       .select("id")
       .eq("professional_id", professional_id)
       .eq("profile_id", user.id)
       .maybeSingle();
+
+    console.log("[BOOK] Patient by profile_id:", byProfile ? `FOUND (${byProfile.id})` : "NOT FOUND");
+
+    if (byProfile) {
+      existingPatient = byProfile;
+    } else if (userProfile.dni) {
+      // Buscar por DNI (caso: el profesional creó el paciente manualmente)
+      const { data: byDni } = await adminClient
+        .from("patients")
+        .select("id")
+        .eq("professional_id", professional_id)
+        .eq("dni", userProfile.dni)
+        .maybeSingle();
+
+      if (byDni) {
+        // Vincular el profile_id al paciente existente
+        await adminClient
+          .from("patients")
+          .update({ profile_id: user.id })
+          .eq("id", byDni.id);
+        existingPatient = byDni;
+      }
+    }
 
     let patientId: string;
 
@@ -97,23 +138,28 @@ export async function POST(request: NextRequest) {
       patientId = existingPatient.id;
     } else {
       // Auto-crear paciente usando datos del perfil
-      const { data: newPatient, error: createPatientError } = await supabase
+      // DNI puede estar vacío si el paciente no lo completó en su perfil
+      const patientDni = userProfile.dni || `WEB-${user.id.slice(0, 8)}`;
+      const { data: newPatient, error: createPatientError } = await adminClient
         .from("patients")
         .insert({
           professional_id,
           profile_id: user.id,
           full_name: userProfile.full_name,
-          dni: userProfile.dni,
+          dni: patientDni,
           phone: userProfile.phone,
+          email: user.email,
           is_particular: true,
         })
         .select("id")
         .single();
 
+      console.log("[BOOK] Create patient result:", newPatient ? `OK (${newPatient.id})` : "NULL", createPatientError?.message || "");
+
       if (createPatientError || !newPatient) {
-        console.error("Error creating patient:", createPatientError);
+        console.error("[BOOK] ERROR creating patient:", createPatientError);
         return NextResponse.json(
-          { error: "Error al crear registro de paciente" },
+          { error: "Error al crear registro de paciente", details: createPatientError?.message },
           { status: 500 }
         );
       }
@@ -123,11 +169,13 @@ export async function POST(request: NextRequest) {
 
     // Validar que el slot de tiempo es válido según la configuración de la agenda
     const validationResult = await validateAppointmentSlot(
-      supabase,
+      adminClient,
       professional_id,
       starts_at,
       ends_at
     );
+
+    console.log("[BOOK] Slot validation:", validationResult.valid ? "VALID" : `INVALID: ${validationResult.error}`);
 
     if (!validationResult.valid) {
       return NextResponse.json(
@@ -137,7 +185,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar que no hay solapamiento con otros turnos
-    const { data: overlapping, error: overlapError } = await supabase
+    const { data: overlapping, error: overlapError } = await adminClient
       .from("appointments")
       .select("id")
       .eq("professional_id", professional_id)
@@ -162,7 +210,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Crear el turno con estado "pending" (requiere confirmación del profesional)
-    const { data: appointment, error: createError } = await supabase
+    const { data: appointment, error: createError } = await adminClient
       .from("appointments")
       .insert({
         professional_id,
@@ -177,8 +225,10 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
+    console.log("[BOOK] Create appointment result:", appointment ? `OK (${appointment.id})` : "NULL", createError?.message || "");
+
     if (createError) {
-      console.error("Error creating appointment:", createError);
+      console.error("[BOOK] ERROR creating appointment:", createError);
       return NextResponse.json(
         { error: "Error al crear el turno", details: createError.message },
         { status: 500 }
@@ -197,9 +247,10 @@ export async function POST(request: NextRequest) {
       new Date(starts_at)
     );
 
+    console.log("[BOOK] ─── Reserva exitosa ───", appointment.id);
     return NextResponse.json({ appointment }, { status: 201 });
   } catch (error) {
-    console.error("Error POST /api/book:", error);
+    console.error("[BOOK] ERROR CATCH:", error);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }

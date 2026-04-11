@@ -82,7 +82,7 @@ export async function GET(
       });
 
     // Obtener enmiendas de este registro (si las hay)
-    const { data: amendments } = await supabase
+    const { data: amendments } = await adminClient
       .from("clinical_records")
       .select("id, content_encrypted, iv, created_at")
       .eq("amends_record_id", id)
@@ -153,6 +153,7 @@ export async function PATCH(
     }
 
     const adminClient = createAdminClient();
+    // Use adminClient for all subsequent data mutations
     const ipAddress =
       request.headers.get("x-forwarded-for") ||
       request.headers.get("x-real-ip") ||
@@ -163,7 +164,7 @@ export async function PATCH(
     if (archiveParsed.success) {
       const isArchive = archiveParsed.data.action === "archive";
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await adminClient
         .from("clinical_records")
         .update({ is_archived: isArchive })
         .eq("id", id)
@@ -222,14 +223,14 @@ export async function PATCH(
     }
 
     // Crear nueva entrada como enmienda
-    const { data: amendment, error: insertError } = await supabase
+    const { data: amendment, error: insertError } = await adminClient
       .from("clinical_records")
       .insert({
         professional_id: user.id,
         patient_id: existingRecord.patient_id,
         appointment_id: existingRecord.appointment_id || null,
-        content_encrypted: encryptedData.contentEncrypted,
-        iv: encryptedData.iv,
+        content_encrypted: encryptedData.contentEncrypted as string,
+        iv: encryptedData.iv as string,
         is_amendment: true,
         amends_record_id: id,
       })

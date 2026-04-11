@@ -32,7 +32,7 @@ async function getProfessionals(city: string, specialty: string) {
       city,
       province,
       is_visible,
-      profile:profiles(full_name, avatar_url)
+      profile:profiles!id(full_name, avatar_url)
     `)
     .eq('specialty_slug', specialty)
     .ilike('city', displayCity)

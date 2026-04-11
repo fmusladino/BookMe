@@ -1,15 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { format, addMinutes, parseISO } from "date-fns";
+import { useState, useEffect, useRef } from "react";
+import { format, addMinutes, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isBefore, startOfDay, addMonths, subMonths } from "date-fns";
+import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, AlertCircle, Video, MapPin, ExternalLink } from "lucide-react";
+import { Plus, Search, AlertCircle, Video, MapPin, ExternalLink, UserPlus, Loader2, ArrowLeft, ChevronLeft, ChevronRight, Calendar, ClipboardList, DollarSign } from "lucide-react";
 import type { Patient, Service } from "@/types";
+import { useScheduleConfig } from "@/hooks/use-schedule-config";
+import { useSession } from "@/hooks/use-session";
+
+interface Prestacion {
+  id: string;
+  insurance_id: string;
+  code: string;
+  description: string;
+  amount: number;
+  valid_from: string;
+  valid_until: string | null;
+  is_active: boolean;
+  insurance: { id: string; name: string } | null;
+}
 
 interface CreateAppointmentModalProps {
   open: boolean;
@@ -26,20 +41,40 @@ export function CreateAppointmentModal({
   initialDate,
   initialTime,
 }: CreateAppointmentModalProps) {
+  const { config: scheduleConfig, fetchScheduleConfig } = useScheduleConfig();
+  const { user } = useSession();
+  const isHealthcare = user?.professional?.line === "healthcare";
   const [loading, setLoading] = useState(false);
   const [searchingPatients, setSearchingPatients] = useState(false);
   const [searchingServices, setSearchingServices] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [prestaciones, setPrestaciones] = useState<Prestacion[]>([]);
   const [showPatientSearch, setShowPatientSearch] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
 
   const [defaultMeetUrl, setDefaultMeetUrl] = useState("");
 
+  // Estado para el date picker custom
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMonth, setDatePickerMonth] = useState(new Date());
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  // Estado para crear nuevo paciente inline
+  const [showNewPatientForm, setShowNewPatientForm] = useState(false);
+  const [savingPatient, setSavingPatient] = useState(false);
+  const [newPatientForm, setNewPatientForm] = useState({
+    full_name: "",
+    dni: "",
+    phone: "",
+    email: "",
+  });
+
   // Formulario
   const [formData, setFormData] = useState({
     patientId: "",
     serviceId: "",
+    prestacionId: "",
     date: "",
     startTime: "",
     endTime: "",
@@ -49,13 +84,12 @@ export function CreateAppointmentModal({
 
   // Inicializar fecha y hora cuando cambia el modal
   useEffect(() => {
-    if (open && initialDate && initialTime) {
+    if (open && initialDate) {
       const dateStr = format(initialDate, "yyyy-MM-dd");
-      const timeStr = initialTime; // formato HH:00
       setFormData((prev) => ({
         ...prev,
         date: dateStr,
-        startTime: timeStr,
+        startTime: initialTime ?? prev.startTime,
       }));
     }
   }, [open, initialDate, initialTime]);
@@ -82,11 +116,37 @@ export function CreateAppointmentModal({
     }
   }, [formData.serviceId, formData.startTime, services]);
 
+  // Fetch prestaciones (solo healthcare)
+  const fetchPrestaciones = async () => {
+    if (!isHealthcare) return;
+    try {
+      const res = await fetch("/api/prestaciones?active=true");
+      if (res.ok) {
+        const data = (await res.json()) as { prestaciones: Prestacion[] };
+        setPrestaciones(data.prestaciones ?? []);
+      }
+    } catch (err) {
+      console.error("Error fetching prestaciones:", err);
+    }
+  };
+
+  // Prestaciones filtradas por la OS del paciente seleccionado
+  const selectedPatient = patients.find((p) => p.id === formData.patientId);
+  const patientInsuranceId = selectedPatient?.insurance_id;
+  const filteredPrestaciones = prestaciones.filter((p) => {
+    if (!patientInsuranceId) return true; // mostrar todas si paciente no tiene OS
+    return p.insurance_id === patientInsuranceId;
+  });
+
+  const selectedPrestacion = prestaciones.find((p) => p.id === formData.prestacionId);
+
   // Cargar pacientes, servicios y meet URL al abrir el modal
   useEffect(() => {
     if (open) {
       fetchPatients();
       fetchServices();
+      fetchPrestaciones();
+      fetchScheduleConfig();
       // Cargar meet URL del profesional
       fetch("/api/professionals/me/visibility")
         .then((r) => r.json())
@@ -133,6 +193,102 @@ export function CreateAppointmentModal({
     p.phone?.includes(patientSearch)
   );
 
+  // Días laborales del profesional (0=Dom, 1=Lun, ..., 6=Sáb)
+  const workingDays = scheduleConfig?.working_days ?? [1, 2, 3, 4, 5]; // default lun-vie
+
+  const isWorkingDay = (date: Date): boolean => {
+    const dayOfWeek = date.getDay(); // 0=Dom, 1=Lun, ..., 6=Sáb
+    return workingDays.includes(dayOfWeek);
+  };
+
+  const isDateDisabled = (date: Date): boolean => {
+    const today = startOfDay(new Date());
+    // No permitir fechas pasadas ni días no laborales
+    if (isBefore(date, today)) return true;
+    // Modo vacaciones activo (desde/hasta)
+    if (scheduleConfig?.vacation_mode) {
+      const vacFrom = scheduleConfig.vacation_from ? new Date(scheduleConfig.vacation_from) : null;
+      const vacUntil = scheduleConfig.vacation_until ? new Date(scheduleConfig.vacation_until) : null;
+      const isInVacation =
+        (!vacFrom && !vacUntil) ||
+        (!vacFrom && vacUntil && (isBefore(date, vacUntil) || isSameDay(date, vacUntil))) ||
+        (vacFrom && !vacUntil && (isBefore(vacFrom, date) || isSameDay(date, vacFrom))) ||
+        (vacFrom && vacUntil && (isBefore(vacFrom, date) || isSameDay(date, vacFrom)) && (isBefore(date, vacUntil) || isSameDay(date, vacUntil)));
+      if (isInVacation) return true;
+    }
+    return !isWorkingDay(date);
+  };
+
+  // Cerrar date picker al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setShowDatePicker(false);
+      }
+    };
+    if (showDatePicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showDatePicker]);
+
+  // Generar días del mes para el calendario
+  const generateCalendarDays = (month: Date) => {
+    const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 }); // Lunes
+    const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
+    const days: Date[] = [];
+    let current = start;
+    while (current <= end) {
+      days.push(current);
+      current = addDays(current, 1);
+    }
+    return days;
+  };
+
+  const handleCreatePatient = async () => {
+    if (!newPatientForm.full_name || !newPatientForm.dni) {
+      toast.error("Nombre y DNI son obligatorios");
+      return;
+    }
+
+    setSavingPatient(true);
+    try {
+      const res = await fetch("/api/patients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: newPatientForm.full_name,
+          dni: newPatientForm.dni,
+          phone: newPatientForm.phone || null,
+          email: newPatientForm.email || null,
+          is_particular: true,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        throw new Error(err.error || "Error al crear paciente");
+      }
+
+      const data = (await res.json()) as { patient: Patient };
+      toast.success("Paciente creado correctamente");
+
+      // Agregar el nuevo paciente a la lista y seleccionarlo
+      setPatients((prev) => [data.patient, ...prev]);
+      setFormData((prev) => ({ ...prev, patientId: data.patient.id }));
+
+      // Limpiar y cerrar el formulario de nuevo paciente
+      setNewPatientForm({ full_name: "", dni: "", phone: "", email: "" });
+      setShowNewPatientForm(false);
+      setShowPatientSearch(false);
+      setPatientSearch("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error al crear paciente");
+    } finally {
+      setSavingPatient(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -164,6 +320,7 @@ export function CreateAppointmentModal({
         body: JSON.stringify({
           patient_id: formData.patientId,
           service_id: formData.serviceId,
+          prestacion_id: formData.prestacionId || null,
           starts_at: startsAt,
           ends_at: endsAt,
           notes: formData.notes || null,
@@ -186,12 +343,15 @@ export function CreateAppointmentModal({
       setFormData({
         patientId: "",
         serviceId: "",
+        prestacionId: "",
         date: "",
         startTime: "",
         endTime: "",
         notes: "",
         modality: "presencial",
       });
+      setShowNewPatientForm(false);
+      setNewPatientForm({ full_name: "", dni: "", phone: "", email: "" });
     } catch (error) {
       console.error("Error al crear turno:", error);
       toast.error(error instanceof Error ? error.message : "Error al crear turno");
@@ -200,7 +360,6 @@ export function CreateAppointmentModal({
     }
   };
 
-  const selectedPatient = patients.find((p) => p.id === formData.patientId);
   const selectedService = services.find((s) => s.id === formData.serviceId);
 
   return (
@@ -219,7 +378,68 @@ export function CreateAppointmentModal({
           {/* Paciente */}
           <div className="space-y-2">
             <Label htmlFor="patient">Paciente *</Label>
-            {selectedPatient ? (
+            {showNewPatientForm ? (
+              /* ---- Formulario inline de nuevo paciente ---- */
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <UserPlus className="h-4 w-4" />
+                    Nuevo paciente
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPatientForm(false)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <ArrowLeft className="h-3 w-3" />
+                    Volver a buscar
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Nombre completo *"
+                    value={newPatientForm.full_name}
+                    onChange={(e) => setNewPatientForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="DNI *"
+                    value={newPatientForm.dni}
+                    onChange={(e) => setNewPatientForm((prev) => ({ ...prev, dni: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="Teléfono"
+                    type="tel"
+                    value={newPatientForm.phone}
+                    onChange={(e) => setNewPatientForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="Email"
+                    type="email"
+                    value={newPatientForm.email}
+                    onChange={(e) => setNewPatientForm((prev) => ({ ...prev, email: e.target.value }))}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCreatePatient}
+                  disabled={savingPatient || !newPatientForm.full_name || !newPatientForm.dni}
+                  className="w-full"
+                >
+                  {savingPatient ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Creando...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Crear y seleccionar paciente
+                    </>
+                  )}
+                </Button>
+              </div>
+            ) : selectedPatient ? (
               <div className="flex items-center justify-between rounded-md border border-input bg-muted/30 px-3 py-2">
                 <span className="text-sm">{selectedPatient.full_name}</span>
                 <button
@@ -263,12 +483,55 @@ export function CreateAppointmentModal({
                         {patient.email && <p className="text-xs text-muted-foreground">{patient.email}</p>}
                       </button>
                     ))}
+                    {/* Botón de nuevo paciente al final de la lista */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewPatientForm(true);
+                        setShowPatientSearch(false);
+                        // Pre-llenar el nombre si estaba buscando
+                        if (patientSearch) {
+                          setNewPatientForm((prev) => ({ ...prev, full_name: patientSearch }));
+                        }
+                        setPatientSearch("");
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 text-primary transition-colors flex items-center gap-2 border-t"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      <span className="font-medium">Agregar nuevo paciente</span>
+                    </button>
                   </div>
                 )}
                 {showPatientSearch && patientSearch && filteredPatients.length === 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 rounded-md border bg-background shadow-md z-50 p-3 text-sm text-muted-foreground">
-                    No se encontraron pacientes
+                  <div className="absolute top-full left-0 right-0 mt-1 rounded-md border bg-background shadow-md z-50">
+                    <div className="p-3 text-sm text-muted-foreground">
+                      No se encontraron pacientes
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewPatientForm(true);
+                        setShowPatientSearch(false);
+                        setNewPatientForm((prev) => ({ ...prev, full_name: patientSearch }));
+                        setPatientSearch("");
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-primary/10 text-primary transition-colors flex items-center gap-2 border-t"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      <span className="font-medium">Crear &quot;{patientSearch}&quot; como nuevo paciente</span>
+                    </button>
                   </div>
+                )}
+                {/* Botón siempre visible debajo del buscador */}
+                {!showPatientSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPatientForm(true)}
+                    className="mt-1.5 flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Agregar nuevo paciente
+                  </button>
                 )}
               </div>
             )}
@@ -303,6 +566,46 @@ export function CreateAppointmentModal({
             )}
           </div>
           </div>
+
+          {/* Prestación (solo Healthcare) */}
+          {isHealthcare && (
+            <div className="space-y-2">
+              <Label htmlFor="prestacion" className="flex items-center gap-1.5">
+                <ClipboardList className="h-3.5 w-3.5 text-muted-foreground" />
+                Prestación
+                <span className="text-xs text-muted-foreground font-normal">(opcional)</span>
+              </Label>
+              <Select
+                id="prestacion"
+                value={formData.prestacionId}
+                onChange={(e) => setFormData((prev) => ({ ...prev, prestacionId: e.target.value }))}
+              >
+                <option value="">Sin prestación</option>
+                {filteredPrestaciones.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    [{p.code}] {p.description} — ${Number(p.amount).toLocaleString("es-AR")}
+                    {p.insurance?.name ? ` (${p.insurance.name})` : ""}
+                  </option>
+                ))}
+              </Select>
+              {selectedPrestacion && (
+                <div className="flex items-center gap-2 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 px-3 py-2">
+                  <DollarSign className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">
+                    Valor prestación: ${Number(selectedPrestacion.amount).toLocaleString("es-AR")}
+                    {selectedPrestacion.insurance?.name && (
+                      <span className="font-normal ml-1">({selectedPrestacion.insurance.name})</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {formData.patientId && patientInsuranceId && filteredPrestaciones.length === 0 && (
+                <p className="text-xs text-amber-600">
+                  No hay prestaciones cargadas para la obra social de este paciente
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Modalidad */}
           <div className="space-y-2">
@@ -354,15 +657,123 @@ export function CreateAppointmentModal({
 
           {/* Fila 2: Fecha y Horarios en 3 columnas */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Fecha */}
+          {/* Fecha — Date picker custom con validación de días laborales */}
           <div className="space-y-2">
             <Label htmlFor="date">Fecha *</Label>
-            <Input
-              id="date"
-              type="date"
-              value={formData.date}
-              onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
-            />
+            <div className="relative" ref={datePickerRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDatePicker(!showDatePicker);
+                  if (formData.date) {
+                    setDatePickerMonth(new Date(formData.date + "T12:00:00"));
+                  }
+                }}
+                className="flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <span className={formData.date ? "text-foreground" : "text-muted-foreground"}>
+                  {formData.date
+                    ? format(new Date(formData.date + "T12:00:00"), "dd/MM/yyyy")
+                    : "Seleccionar fecha"}
+                </span>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </button>
+
+              {showDatePicker && (
+                <div className="absolute top-full left-0 mt-1 rounded-md border bg-background shadow-lg z-50 p-3 w-[280px]">
+                  {/* Header del mes */}
+                  <div className="flex items-center justify-between mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setDatePickerMonth(subMonths(datePickerMonth, 1))}
+                      className="p-1 rounded hover:bg-accent"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="text-sm font-medium capitalize">
+                      {format(datePickerMonth, "MMMM yyyy", { locale: es })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDatePickerMonth(addMonths(datePickerMonth, 1))}
+                      className="p-1 rounded hover:bg-accent"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Días de la semana */}
+                  <div className="grid grid-cols-7 gap-0 mb-1">
+                    {["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"].map((day) => (
+                      <div key={day} className="text-center text-xs font-medium text-muted-foreground py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Días del calendario */}
+                  <div className="grid grid-cols-7 gap-0">
+                    {generateCalendarDays(datePickerMonth).map((day, i) => {
+                      const disabled = isDateDisabled(day);
+                      const isCurrentMonth = isSameMonth(day, datePickerMonth);
+                      const isSelected = formData.date && isSameDay(day, new Date(formData.date + "T12:00:00"));
+                      const isToday = isSameDay(day, new Date());
+
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          disabled={disabled || !isCurrentMonth}
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, date: format(day, "yyyy-MM-dd") }));
+                            setShowDatePicker(false);
+                          }}
+                          className={`
+                            h-8 w-full rounded text-sm transition-colors
+                            ${!isCurrentMonth ? "text-transparent pointer-events-none" : ""}
+                            ${isCurrentMonth && disabled ? "text-muted-foreground/30 cursor-not-allowed line-through" : ""}
+                            ${isCurrentMonth && !disabled ? "hover:bg-accent cursor-pointer" : ""}
+                            ${isSelected ? "bg-primary text-primary-foreground hover:bg-primary/90 font-semibold" : ""}
+                            ${isToday && !isSelected && isCurrentMonth ? "border border-primary text-primary font-medium" : ""}
+                          `}
+                        >
+                          {isCurrentMonth ? format(day, "d") : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, date: "" }));
+                        setShowDatePicker(false);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Borrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = new Date();
+                        if (!isDateDisabled(today)) {
+                          setFormData((prev) => ({ ...prev, date: format(today, "yyyy-MM-dd") }));
+                          setShowDatePicker(false);
+                        } else {
+                          toast.error("Hoy no es un día laborable");
+                        }
+                      }}
+                      className="text-xs text-primary hover:text-primary/80 font-medium"
+                    >
+                      Hoy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Hora de inicio */}

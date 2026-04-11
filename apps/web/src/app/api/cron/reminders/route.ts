@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         patient:patients(full_name, email, phone),
         professional:professionals(
           specialty,
-          profile:profiles(full_name)
+          profile:profiles!id(full_name)
         ),
         service:services(name)
         `

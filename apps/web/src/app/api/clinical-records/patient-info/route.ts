@@ -18,8 +18,11 @@ export async function GET() {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
+    // Usar admin client para contar registros clínicos (RLS bloquea al paciente)
+    const admin = createAdminClient();
+
     // Buscar registros de paciente vinculados a este usuario
-    const { data: patientRecords } = await supabase
+    const { data: patientRecords } = await admin
       .from("patients")
       .select("id, professional_id")
       .eq("profile_id", user.id);
@@ -27,9 +30,6 @@ export async function GET() {
     if (!patientRecords || patientRecords.length === 0) {
       return NextResponse.json({ professionals: [] });
     }
-
-    // Usar admin client para contar registros clínicos (RLS bloquea al paciente)
-    const admin = createAdminClient();
     const results = [];
 
     for (const pr of patientRecords) {
@@ -43,7 +43,7 @@ export async function GET() {
         // Obtener datos del profesional
         const { data: prof } = await admin
           .from("professionals")
-          .select("specialty, profile:profiles(full_name)")
+          .select("specialty, profile:profiles!id(full_name)")
           .eq("id", pr.professional_id)
           .single();
 

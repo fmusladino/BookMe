@@ -12,7 +12,7 @@ export interface SubscriptionInfo {
 export interface SessionUser {
   id: string;
   email: string;
-  role: "professional" | "patient" | "admin" | "superadmin" | "marketing";
+  role: "professional" | "patient" | "admin" | "superadmin" | "marketing" | "canchas";
   full_name: string;
   avatar_url: string | null;
   professional: {
@@ -21,6 +21,14 @@ export interface SessionUser {
     plan: string;
     status: string;
     slug: string;
+  } | null;
+  /** Datos del dueño de canchas (solo si role === 'canchas') */
+  court_owner: {
+    business_name: string;
+    slug: string;
+    city: string;
+    plan: string;
+    status: string;
   } | null;
   /** Datos de suscripción incluidos desde /api/auth/me (evita fetch separado) */
   subscription: SubscriptionInfo | null;

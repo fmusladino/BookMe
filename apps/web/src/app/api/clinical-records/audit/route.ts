@@ -31,8 +31,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "patient_id es requerido" }, { status: 400 });
     }
 
+    const adminClient = createAdminClient();
+
     // Verificar que el profesional tiene acceso a este paciente
-    const { data: patientAccess } = await supabase
+    const { data: patientAccess } = await adminClient
       .from("appointments")
       .select("id")
       .eq("professional_id", user.id)
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Obtener IDs de los clinical_records de este profesional + paciente
-    const { data: recordIds } = await supabase
+    const { data: recordIds } = await adminClient
       .from("clinical_records")
       .select("id")
       .eq("professional_id", user.id)
@@ -60,9 +62,7 @@ export async function GET(request: NextRequest) {
     const ids = recordIds.map((r) => r.id);
 
     // Obtener logs de auditoría con info del usuario que accedió
-    const admin = createAdminClient();
-
-    const { data: auditLogs, error: auditError, count } = await admin
+    const { data: auditLogs, error: auditError, count } = await adminClient
       .from("clinical_record_audit")
       .select("id, record_id, accessed_by, action, accessed_at, ip_address, details", { count: "exact" })
       .in("record_id", ids)
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     // Enriquecer con nombres de usuario
     const userIds = [...new Set((auditLogs || []).map((l) => l.accessed_by))];
-    const { data: profiles } = await admin
+    const { data: profiles } = await adminClient
       .from("profiles")
       .select("id, full_name")
       .in("id", userIds);

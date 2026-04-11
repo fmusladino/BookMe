@@ -344,6 +344,7 @@ export function MiaFab() {
 
       {/* FAB button */}
       <button
+        data-tour="mia-fab"
         onClick={() => setOpen(!open)}
         className={cn(
           "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full shadow-lg transition-all duration-200 max-lg:right-4",

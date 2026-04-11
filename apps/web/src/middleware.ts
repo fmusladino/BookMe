@@ -8,6 +8,7 @@ const ROLE_HOME: Record<string, string> = {
   admin: "/clinica",
   superadmin: "/admin",
   marketing: "/marketing",
+  canchas: "/canchas",
 };
 
 // Rutas que no requieren autenticación
@@ -18,12 +19,15 @@ const PUBLIC_ROUTES = [
   "/directorio",
   "/perfil",      // perfiles públicos (rewrite desde /@slug)
   "/book",        // flujo de reserva pública
+  "/complejos",   // páginas públicas de complejos deportivos: /complejos/[slug]
   "/api/webhooks",
   "/api/cron",
   "/api/professionals", // directorio público y perfiles
   "/api/book",          // reserva (auth se verifica internamente)
   "/api/schedule/available-slots", // slots públicos para booking
   "/api/auth/register",           // registro de pacientes
+  "/api/court-owners",            // perfiles públicos de complejos
+  "/api/court-bookings",          // reservas públicas de canchas (POST sin auth)
 ];
 
 function isPublicRoute(pathname: string): boolean {
@@ -94,6 +98,7 @@ export async function middleware(request: NextRequest) {
     admin: ["/clinica"],
     superadmin: ["/admin", "/marketing"],
     marketing: ["/marketing"],
+    canchas: ["/canchas"],
   };
 
   const allowedPrefixes = ROLE_ROUTES[role] ?? [];
@@ -103,7 +108,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/mis-turnos") ||
     pathname.startsWith("/clinica") ||
     pathname.startsWith("/admin") ||
-    pathname.startsWith("/marketing");
+    pathname.startsWith("/marketing") ||
+    pathname.startsWith("/canchas");
 
   // Si es una ruta de panel y el usuario no tiene acceso, redirigir a su home
   if (isProtectedPanel && !isApiRoute) {

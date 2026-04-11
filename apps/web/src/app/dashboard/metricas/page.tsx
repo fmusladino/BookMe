@@ -58,6 +58,20 @@ interface BillingData {
   >;
 }
 
+interface PrestacionStatsData {
+  currentMonth: { total: number; count: number; label: string };
+  totalHistorico: number;
+  totalCount: number;
+  monthlyEvolution: Array<{
+    month: string;
+    year: number;
+    monthNum: number;
+    total: number;
+    count: number;
+  }>;
+  byInsurance: Array<{ name: string; total: number; count: number }>;
+}
+
 const formatCurrency = (value: number): string => {
   return `$${value.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
 };
@@ -71,6 +85,7 @@ export default function MetricasPage() {
   const { hasFeature } = useFeatures();
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [billing, setBilling] = useState<BillingData | null>(null);
+  const [prestacionStats, setPrestacionStats] = useState<PrestacionStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<string>("");
 
@@ -116,6 +131,7 @@ export default function MetricasPage() {
         ];
         if (isHealthcare) {
           promises.push(fetch(`/api/billing/summary?period=${period}`));
+          promises.push(fetch(`/api/prestaciones/stats`));
         }
 
         const results = await Promise.allSettled(promises);
@@ -135,6 +151,12 @@ export default function MetricasPage() {
         if (isHealthcare && results[1]?.status === "fulfilled" && results[1].value.ok) {
           const billingData = await results[1].value.json();
           setBilling(billingData);
+        }
+
+        // Procesar prestaciones stats (si aplica)
+        if (isHealthcare && results[2]?.status === "fulfilled" && results[2].value.ok) {
+          const prestData = await results[2].value.json();
+          setPrestacionStats(prestData);
         }
       } catch (error) {
         console.error("Error fetching metrics:", error);
@@ -555,6 +577,151 @@ export default function MetricasPage() {
                     <p className="text-center text-sm text-muted-foreground">
                       Cargando datos financieros...
                     </p>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          {/* SECTION 3: Prestaciones (Healthcare only) */}
+          {prestacionStats && (
+            <>
+              <hr className="my-8" />
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">Prestaciones</h2>
+                <p className="text-sm text-muted-foreground">Total facturado por prestaciones médicas</p>
+              </div>
+
+              {/* Prestaciones KPI Cards */}
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Mes actual</CardTitle>
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(prestacionStats.currentMonth.total)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {prestacionStats.currentMonth.count} turnos con prestación
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total histórico</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formatCurrency(prestacionStats.totalHistorico)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {prestacionStats.totalCount} turnos totales
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ticket promedio</CardTitle>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {prestacionStats.totalCount > 0
+                        ? formatCurrency(prestacionStats.totalHistorico / prestacionStats.totalCount)
+                        : "$0"}
+                    </div>
+                    <p className="text-xs text-muted-foreground">por prestación</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Evolución mensual chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Evolución mensual de prestaciones</CardTitle>
+                  <CardDescription>Total en pesos por mes (últimos 12 meses)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {prestacionStats.monthlyEvolution.some((m) => m.total > 0) ? (
+                    <div className="flex items-end gap-1 h-48 px-2 pb-4 border-b border-muted">
+                      {prestacionStats.monthlyEvolution.map((m) => {
+                        const maxVal = Math.max(
+                          ...prestacionStats.monthlyEvolution.map((x) => x.total),
+                          1
+                        );
+                        const heightPct = (m.total / maxVal) * 100;
+                        return (
+                          <div
+                            key={`${m.year}-${m.monthNum}`}
+                            className="flex-1 flex flex-col items-center gap-1 group"
+                            title={`${m.month} ${m.year}: ${formatCurrency(m.total)} (${m.count} turnos)`}
+                          >
+                            <div className="text-[10px] text-muted-foreground font-medium group-hover:text-foreground transition-colors truncate max-w-full">
+                              {m.total > 0 ? formatCurrency(m.total) : ""}
+                            </div>
+                            <div
+                              className="w-full bg-green-500/80 hover:bg-green-500 rounded transition-all duration-200"
+                              style={{
+                                height: `${Math.max(heightPct, m.total > 0 ? 8 : 2)}%`,
+                                minHeight: "2px",
+                              }}
+                            />
+                            <div className="text-[10px] text-muted-foreground truncate max-w-full">
+                              {m.month}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-sm text-muted-foreground py-8">
+                      Sin datos de prestaciones aún
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Desglose por OS */}
+              {prestacionStats.byInsurance.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Prestaciones por obra social</CardTitle>
+                    <CardDescription>
+                      Distribución del mes actual ({prestacionStats.currentMonth.label})
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {prestacionStats.byInsurance.map((ins) => {
+                        const maxTotal = prestacionStats.byInsurance[0].total;
+                        const widthPct = (ins.total / maxTotal) * 100;
+                        return (
+                          <div key={ins.name} className="space-y-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-medium truncate flex-1">{ins.name}</p>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                {ins.count} turnos · {formatCurrency(ins.total)}
+                              </span>
+                            </div>
+                            <div className="w-full bg-muted rounded-sm h-6 overflow-hidden">
+                              <div
+                                className="h-full bg-green-500/80 rounded-sm flex items-center justify-end pr-2 transition-all duration-200"
+                                style={{ width: `${widthPct}%` }}
+                              >
+                                <span className="text-xs font-medium text-white whitespace-nowrap">
+                                  {formatCurrency(ins.total)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </CardContent>
                 </Card>
               )}

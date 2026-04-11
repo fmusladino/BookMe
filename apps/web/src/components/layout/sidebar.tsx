@@ -30,6 +30,8 @@ import {
   HelpCircle,
   Globe,
   QrCode,
+  Dribbble,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -56,6 +58,7 @@ const NAV_PROFESSIONAL_BASE: NavItem[] = [
 
 // Solo Healthcare
 const NAV_HEALTHCARE_EXTRA: NavItem[] = [
+  { label: "Prestaciones", href: "/dashboard/prestaciones", icon: ClipboardList },
   { label: "Facturación", href: "/dashboard/facturacion", icon: CreditCard },
 ];
 
@@ -108,6 +111,15 @@ const NAV_MARKETING: NavItem[] = [
   { label: "Dashboard", href: "/marketing", icon: TrendingUp },
 ];
 
+// Dueño de canchas
+const NAV_CANCHAS: NavItem[] = [
+  { label: "Panel", href: "/canchas", icon: Home },
+  { label: "Mis Canchas", href: "/canchas/mis-canchas", icon: Dribbble },
+  { label: "Disponibilidad", href: "/canchas/reservas", icon: BookOpen },
+  { label: "Dashboard", href: "/canchas/dashboard", icon: BarChart3 },
+  { label: "Configuración", href: "/canchas/configuracion", icon: Settings },
+];
+
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -146,6 +158,8 @@ export const Sidebar = memo(function Sidebar() {
         return NAV_SUPERADMIN;
       case "marketing":
         return NAV_MARKETING;
+      case "canchas":
+        return NAV_CANCHAS;
       default:
         return [];
     }
@@ -174,6 +188,8 @@ export const Sidebar = memo(function Sidebar() {
         return "Super Admin";
       case "marketing":
         return "Marketing";
+      case "canchas":
+        return user.court_owner?.business_name ?? "Dueño de Canchas";
       default:
         return "";
     }
@@ -199,6 +215,7 @@ export const Sidebar = memo(function Sidebar() {
 
       {/* Sidebar */}
       <aside
+        data-tour="sidebar"
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r bg-card transition-transform duration-200 lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
@@ -230,6 +247,9 @@ export const Sidebar = memo(function Sidebar() {
               {user.professional?.line === "business" && (
                 <span className="ml-1 text-emerald-500">• Negocios</span>
               )}
+              {user.role === "canchas" && (
+                <span className="ml-1 text-orange-500">• Canchas</span>
+              )}
             </p>
           </div>
         )}
@@ -249,10 +269,14 @@ export const Sidebar = memo(function Sidebar() {
                   item.href !== "/dashboard/agenda/hoy" &&
                   item.href !== "/clinica/configuracion");
 
+              // Generar atributo data-tour a partir del label del nav item
+              const tourId = `nav-${item.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-")}`;
+
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  data-tour={tourId}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",

@@ -114,6 +114,7 @@ export type Database = {
           province: string;
           country: string;
           address: string | null;
+          postal_code: string | null;
           latitude: number | null;
           longitude: number | null;
           public_slug: string;
@@ -142,6 +143,7 @@ export type Database = {
           province: string;
           country?: string;
           address?: string | null;
+          postal_code?: string | null;
           latitude?: number | null;
           longitude?: number | null;
           public_slug: string;
@@ -165,6 +167,7 @@ export type Database = {
           province?: string;
           country?: string;
           address?: string | null;
+          postal_code?: string | null;
           latitude?: number | null;
           longitude?: number | null;
           public_slug?: string;
@@ -297,6 +300,7 @@ export type Database = {
           lunch_break_start: string | null;
           lunch_break_end: string | null;
           vacation_mode: boolean;
+          vacation_from: string | null;
           vacation_until: string | null;
           updated_at: string;
         };
@@ -308,6 +312,7 @@ export type Database = {
           lunch_break_start?: string | null;
           lunch_break_end?: string | null;
           vacation_mode?: boolean;
+          vacation_from?: string | null;
           vacation_until?: string | null;
           updated_at?: string;
         };
@@ -317,6 +322,7 @@ export type Database = {
           lunch_break_start?: string | null;
           lunch_break_end?: string | null;
           vacation_mode?: boolean;
+          vacation_from?: string | null;
           vacation_until?: string | null;
         };
         Relationships: [];

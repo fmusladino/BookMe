@@ -35,10 +35,10 @@ async function getProfessionalData(slug: string) {
     .eq('id', professional.id)
     .single();
 
-  // 3. Fetch services
+  // 3. Fetch services with insurances
   const { data: services } = await supabase
     .from('services')
-    .select('id, name, duration_minutes, price, show_price, is_active')
+    .select('id, name, duration_minutes, price, show_price, is_active, service_insurances(insurance_id, insurance:insurances(id, name))')
     .eq('professional_id', professional.id)
     .eq('is_active', true)
     .order('name');
@@ -219,12 +219,26 @@ export default async function ProfessionalProfilePage({ params }: PageProps) {
                       <span>{service.duration_minutes} min</span>
                     </div>
 
-                    {service.show_price && service.price && (
+                    {service.show_price && service.price && Number(service.price) > 0 && (
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <DollarSign className="w-4 h-4 text-teal-500" />
                         <span className="font-semibold text-slate-900 dark:text-white">
-                          ${service.price.toLocaleString('es-AR')}
+                          Particular: ${Number(service.price).toLocaleString('es-AR')}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Obras sociales aceptadas */}
+                    {(service as any).service_insurances && (service as any).service_insurances.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {(service as any).service_insurances.map((si: any) => (
+                          <span
+                            key={si.insurance_id}
+                            className="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 text-xs font-medium"
+                          >
+                            {si.insurance?.name || "OS"}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>

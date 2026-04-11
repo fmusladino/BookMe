@@ -85,17 +85,31 @@ export async function validateAppointmentSlot(
       return { valid: true };
     }
 
-    // ─── Regla 1: Modo vacaciones ───────────────────────────────────────────
-    if (config.vacation_mode && config.vacation_until) {
+    // ─── Regla 1: Modo vacaciones (desde/hasta) ────────────────────────────
+    if (config.vacation_mode) {
       const appointmentStart = new Date(startsAt);
-      const vacationUntil = new Date(config.vacation_until);
+      const vacFrom = (config as any).vacation_from ? new Date((config as any).vacation_from) : null;
+      const vacUntil = config.vacation_until ? new Date(config.vacation_until) : null;
 
-      if (appointmentStart < vacationUntil) {
-        // Formatear fecha para el mensaje (YYYY-MM-DD)
-        const formattedDate = config.vacation_until.split("T")[0];
+      const isInVacation =
+        (!vacFrom && !vacUntil) ||
+        (!vacFrom && vacUntil && appointmentStart <= vacUntil) ||
+        (vacFrom && !vacUntil && appointmentStart >= vacFrom) ||
+        (vacFrom && vacUntil && appointmentStart >= vacFrom && appointmentStart <= vacUntil);
+
+      if (isInVacation) {
+        const fromStr = vacFrom ? vacFrom.toISOString().split("T")[0] : "";
+        const untilStr = vacUntil ? vacUntil.toISOString().split("T")[0] : "";
+        const rangeMsg = fromStr && untilStr
+          ? `desde ${fromStr} hasta ${untilStr}`
+          : untilStr
+            ? `hasta ${untilStr}`
+            : fromStr
+              ? `desde ${fromStr}`
+              : "";
         return {
           valid: false,
-          error: `El profesional está en modo vacaciones hasta ${formattedDate}`,
+          error: `El profesional está en modo vacaciones ${rangeMsg}`.trim(),
         };
       }
     }

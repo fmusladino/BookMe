@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { SubscriptionBanner } from "@/components/layout/subscription-banner";
+import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,7 @@ export default function DashboardLayout({
           {children}
         </div>
       </main>
+      <OnboardingProvider />
     </div>
   );
 }

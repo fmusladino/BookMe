@@ -28,7 +28,7 @@ export default function QRPage() {
   const [qrSize, setQrSize] = useState(280);
 
   const professional = user?.professional;
-  const slug = professional?.public_slug ?? "";
+  const slug = professional?.slug ?? "";
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://bookme.ar";
   const bookingUrl = `${baseUrl}/book/${slug}`;
 

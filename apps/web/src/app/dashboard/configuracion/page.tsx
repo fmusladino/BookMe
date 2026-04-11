@@ -9,8 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check } from "lucide-react";
+import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check, Building2, Loader2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { invalidateScheduleConfigGlobal } from "@/hooks/use-schedule-config";
 
 const DAYS = [
   { value: 1, label: "Lunes" },
@@ -36,6 +37,7 @@ interface ScheduleConfigState {
   lunchBreakStart: string;
   lunchBreakEnd: string;
   vacationMode: boolean;
+  vacationFrom: string;
   vacationUntil: string;
 }
 
@@ -43,6 +45,14 @@ interface GCalStatus {
   connected: boolean;
   lastSyncedAt: string | null;
   connectedSince: string | null;
+}
+
+interface ProfInsurance {
+  id: string;
+  name: string;
+  code: string | null;
+  logo_url: string | null;
+  professional_insurance_id: string;
 }
 
 export default function ConfiguracionPage() {
@@ -55,6 +65,11 @@ export default function ConfiguracionPage() {
   const [defaultMeetUrl, setDefaultMeetUrl] = useState("");
   const [meetUrlSaving, setMeetUrlSaving] = useState(false);
   const [meetUrlCopied, setMeetUrlCopied] = useState(false);
+  // Obras sociales / prepagas del profesional
+  const [profInsurances, setProfInsurances] = useState<ProfInsurance[]>([]);
+  const [insurancesLoading, setInsurancesLoading] = useState(false);
+  const [newInsuranceName, setNewInsuranceName] = useState("");
+  const [addingInsurance, setAddingInsurance] = useState(false);
   const searchParams = useSearchParams();
 
   const [config, setConfig] = useState<ScheduleConfigState>({
@@ -63,6 +78,7 @@ export default function ConfiguracionPage() {
     lunchBreakStart: "",
     lunchBreakEnd: "",
     vacationMode: false,
+    vacationFrom: "",
     vacationUntil: "",
   });
 
@@ -85,6 +101,7 @@ export default function ConfiguracionPage() {
           lunch_break_start: string | null;
           lunch_break_end: string | null;
           vacation_mode: boolean;
+          vacation_from: string | null;
           vacation_until: string | null;
         } | null;
         workingHours: Array<{
@@ -101,6 +118,7 @@ export default function ConfiguracionPage() {
           lunchBreakStart: data.config.lunch_break_start ?? "",
           lunchBreakEnd: data.config.lunch_break_end ?? "",
           vacationMode: data.config.vacation_mode,
+          vacationFrom: data.config.vacation_from ?? "",
           vacationUntil: data.config.vacation_until ?? "",
         });
       }
@@ -151,11 +169,71 @@ export default function ConfiguracionPage() {
     }
   }, []);
 
+  // Fetch obras sociales del profesional
+  const fetchProfInsurances = useCallback(async () => {
+    setInsurancesLoading(true);
+    try {
+      const res = await fetch("/api/professionals/me/insurances");
+      if (res.ok) {
+        const data = await res.json() as { insurances: ProfInsurance[] };
+        setProfInsurances(data.insurances ?? []);
+      }
+    } catch {
+      // Silencioso
+    } finally {
+      setInsurancesLoading(false);
+    }
+  }, []);
+
+  const handleAddInsurance = async () => {
+    const name = newInsuranceName.trim();
+    if (!name) return;
+    setAddingInsurance(true);
+    try {
+      const res = await fetch("/api/professionals/me/insurances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        toast.success(`"${name}" agregada correctamente`);
+        setNewInsuranceName("");
+        fetchProfInsurances();
+      } else {
+        const data = await res.json() as { error?: string };
+        toast.error(data.error ?? "Error al agregar obra social");
+      }
+    } catch {
+      toast.error("Error al agregar obra social");
+    } finally {
+      setAddingInsurance(false);
+    }
+  };
+
+  const handleRemoveInsurance = async (insuranceId: string, name: string) => {
+    try {
+      const res = await fetch("/api/professionals/me/insurances", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ insurance_id: insuranceId }),
+      });
+      if (res.ok) {
+        toast.success(`"${name}" eliminada`);
+        fetchProfInsurances();
+      } else {
+        toast.error("Error al eliminar obra social");
+      }
+    } catch {
+      toast.error("Error al eliminar obra social");
+    }
+  };
+
   useEffect(() => {
     fetchConfig();
     fetchGcalStatus();
     fetchVisibility();
-  }, [fetchConfig, fetchGcalStatus, fetchVisibility]);
+    fetchProfInsurances();
+  }, [fetchConfig, fetchGcalStatus, fetchVisibility, fetchProfInsurances]);
 
   // Mostrar toast después del redirect de Google OAuth
   useEffect(() => {
@@ -278,6 +356,7 @@ export default function ConfiguracionPage() {
           lunchBreakStart: config.lunchBreakStart || null,
           lunchBreakEnd: config.lunchBreakEnd || null,
           vacationMode: config.vacationMode,
+          vacationFrom: config.vacationFrom || null,
           vacationUntil: config.vacationUntil || null,
         }),
       });
@@ -296,6 +375,8 @@ export default function ConfiguracionPage() {
         throw new Error(errData.error);
       }
 
+      // Invalidar cache global para que Agenda y Hoy refresquen la config
+      invalidateScheduleConfigGlobal();
       toast.success("Configuración guardada correctamente");
     } catch (error) {
       console.error("Error al guardar:", error);
@@ -343,20 +424,41 @@ export default function ConfiguracionPage() {
         </CardHeader>
         {config.vacationMode && (
           <CardContent>
-            <div className="flex items-center gap-3">
-              <Label htmlFor="vacation-until" className="whitespace-nowrap">
-                Hasta el
-              </Label>
-              <Input
-                id="vacation-until"
-                type="date"
-                value={config.vacationUntil}
-                onChange={(e) =>
-                  setConfig((prev) => ({ ...prev, vacationUntil: e.target.value }))
-                }
-                className="max-w-48"
-              />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="vacation-from" className="whitespace-nowrap text-sm">
+                  Desde
+                </Label>
+                <Input
+                  id="vacation-from"
+                  type="date"
+                  value={config.vacationFrom}
+                  onChange={(e) =>
+                    setConfig((prev) => ({ ...prev, vacationFrom: e.target.value }))
+                  }
+                  className="max-w-48"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="vacation-until" className="whitespace-nowrap text-sm">
+                  Hasta
+                </Label>
+                <Input
+                  id="vacation-until"
+                  type="date"
+                  value={config.vacationUntil}
+                  onChange={(e) =>
+                    setConfig((prev) => ({ ...prev, vacationUntil: e.target.value }))
+                  }
+                  className="max-w-48"
+                />
+              </div>
             </div>
+            {config.vacationFrom && config.vacationUntil && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                Las vacaciones están programadas del {new Date(config.vacationFrom + "T12:00:00").toLocaleDateString("es-AR")} al {new Date(config.vacationUntil + "T12:00:00").toLocaleDateString("es-AR")}
+              </p>
+            )}
           </CardContent>
         )}
       </Card>
@@ -652,6 +754,77 @@ export default function ConfiguracionPage() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Obras Sociales / Prepagas */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Building2 className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle>Obras Sociales / Prepagas</CardTitle>
+              <CardDescription>
+                Agregá las obras sociales y prepagas con las que trabajás. Estas aparecerán en el módulo de Prestaciones.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Agregar nueva */}
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Nombre de la obra social (ej: OSDE, Galeno...)"
+              value={newInsuranceName}
+              onChange={(e) => setNewInsuranceName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddInsurance();
+              }}
+              className="flex-1"
+            />
+            <Button
+              onClick={handleAddInsurance}
+              disabled={addingInsurance || !newInsuranceName.trim()}
+              size="sm"
+            >
+              {addingInsurance ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-1 h-4 w-4" />
+              )}
+              Agregar
+            </Button>
+          </div>
+
+          {/* Lista actual */}
+          {insurancesLoading ? (
+            <div className="flex items-center justify-center py-4 text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando...
+            </div>
+          ) : profInsurances.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No tenés obras sociales cargadas. Agregá una para empezar.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {profInsurances.map((ins) => (
+                <Badge
+                  key={ins.id}
+                  variant="secondary"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm"
+                >
+                  {ins.name}
+                  <button
+                    onClick={() => handleRemoveInsurance(ins.id, ins.name)}
+                    className="ml-1 rounded-full p-0.5 hover:bg-destructive/20 hover:text-destructive"
+                    title={`Eliminar ${ins.name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

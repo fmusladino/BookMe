@@ -42,7 +42,7 @@ type ViewMode = "week" | "month";
 export default function AgendaPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
-  const { appointments, loading, fetchAppointments, updateAppointment } = useAppointments();
+  const { appointments, loading, fetchAppointments, updateAppointment, invalidateCache } = useAppointments();
   const { blocks, fetchBlocks, createBlock, deleteBlock } = useScheduleBlocks();
   const { config: scheduleConfig, workingHours, fetchScheduleConfig } = useScheduleConfig();
 
@@ -169,7 +169,8 @@ export default function AgendaPage() {
   };
 
   const handleAppointmentCreated = async () => {
-    // Refrescar la lista de turnos después de crear uno
+    // Invalidar cache y refrescar la lista de turnos después de crear uno
+    invalidateCache();
     const from = dateRange.start.toISOString();
     const to = dateRange.end.toISOString();
     await fetchAppointments(from, to);

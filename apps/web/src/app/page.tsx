@@ -8,6 +8,7 @@ import {
   Users,
   ArrowRight,
   CheckCircle2,
+  Dribbble,
 } from "lucide-react";
 import { PricingSection } from "@/components/landing/pricing-section";
 
@@ -64,7 +65,7 @@ export default function HomePage() {
             <span className="text-bookme-navy dark:text-bookme-mint">de forma inteligente</span>
           </h1>
           <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-            La plataforma de gestión de turnos para profesionales de la salud y negocios de servicios en LATAM. Agenda, recordatorios, directorio público y más.
+            La plataforma de gestión de turnos para profesionales de la salud, negocios de servicios y complejos de canchas en LATAM. Agenda, recordatorios, reservas online y más.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -149,13 +150,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Two lines */}
+      {/* Three lines */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4">
           <h2 className="text-3xl font-heading font-bold text-center text-foreground mb-12">
-            Para cualquier profesional
+            Para cualquier profesional o negocio
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Healthcare */}
             <div className="p-8 rounded-xl border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
               <div className="inline-block px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm font-medium mb-4">
@@ -196,6 +197,35 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
+            </div>
+
+            {/* Comercios */}
+            <div className="p-8 rounded-xl border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/30">
+              <div className="inline-block px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-sm font-medium mb-4">
+                Comercios
+              </div>
+              <h3 className="text-2xl font-bold text-foreground mb-4">Comercios</h3>
+              <ul className="space-y-3">
+                {[
+                  "Gestión de múltiples espacios con horarios",
+                  "Reserva online con seña integrada",
+                  "Canchas, restaurantes, bares y más",
+                  "Página pública para compartir en redes",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/register"
+                className="inline-flex items-center gap-1.5 mt-6 text-sm font-medium text-orange-600 dark:text-orange-400 hover:underline"
+              >
+                <Dribbble className="h-4 w-4" />
+                Registrar mi complejo
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
         </div>

@@ -42,7 +42,7 @@ export async function GET() {
   // IDs de profesionales
   const { data: profs } = await admin
     .from("professionals")
-    .select("id, profile:profiles(full_name)")
+    .select("id, profile:profiles!id(full_name)")
     .eq("clinic_id", clinicId);
 
   const profIds = profs?.map((p) => p.id) ?? [];

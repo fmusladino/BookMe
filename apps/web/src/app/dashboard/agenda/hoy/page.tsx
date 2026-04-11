@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   format,
   startOfDay,
   endOfDay,
   parseISO,
-  isPast,
   addDays,
   subDays,
+  addMinutes,
+  isSameDay,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useAppointments } from "@/hooks/use-appointments";
+import { useScheduleConfig } from "@/hooks/use-schedule-config";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -22,27 +22,36 @@ import {
   Clock,
   Phone,
   Mail,
-  User,
   CheckCircle2,
   XCircle,
   AlertCircle,
   CalendarCheck,
+  CalendarPlus,
+  Video,
+  MapPin,
+  RefreshCw,
+  User,
+  Stethoscope,
 } from "lucide-react";
 import type { AppointmentWithRelations } from "@/types";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { CreateAppointmentModal } from "@/components/agenda/create-appointment-modal";
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "success" | "destructive" | "warning" | "secondary" | "outline"; icon: typeof Clock }> = {
-  pending: { label: "Pendiente", variant: "warning", icon: Clock },
-  confirmed: { label: "Confirmado", variant: "default", icon: CalendarCheck },
-  completed: { label: "Completado", variant: "success", icon: CheckCircle2 },
-  cancelled: { label: "Cancelado", variant: "destructive", icon: XCircle },
-  no_show: { label: "Ausente", variant: "secondary", icon: AlertCircle },
-};
+interface TimeSlot {
+  time: string;
+  appointment: AppointmentWithRelations | null;
+}
 
 export default function HoyPage() {
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { appointments, loading, fetchAppointments, updateAppointment } = useAppointments();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { config: scheduleConfig, workingHours, fetchScheduleConfig } = useScheduleConfig();
+  const [expandedSlot, setExpandedSlot] = useState<string | null>(null);
+
+  // Modal para crear turno desde slot disponible
+  const [createModal, setCreateModal] = useState<{ open: boolean; time?: string }>({ open: false });
 
   const loadDay = useCallback(
     (date: Date) => {
@@ -52,37 +61,79 @@ export default function HoyPage() {
   );
 
   useEffect(() => {
+    fetchScheduleConfig();
+  }, [fetchScheduleConfig]);
+
+  useEffect(() => {
     loadDay(selectedDate);
   }, [selectedDate, loadDay]);
 
-  // Ordenar por hora de inicio
-  const sorted = [...appointments].sort(
-    (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
-  );
+  // Generar los time slots del día
+  const timeSlots: TimeSlot[] = useMemo(() => {
+    const dayOfWeek = selectedDate.getDay();
+    const slotDuration = scheduleConfig?.slot_duration ?? 30;
+    const dayWH = workingHours?.filter((wh) => wh.day_of_week === dayOfWeek) ?? [];
 
-  // Estadísticas del día
+    if (dayWH.length === 0 || !scheduleConfig?.working_days.includes(dayOfWeek)) return [];
+
+    if (scheduleConfig?.vacation_mode) {
+      const vacFrom = scheduleConfig.vacation_from ? new Date(scheduleConfig.vacation_from) : null;
+      const vacUntil = scheduleConfig.vacation_until ? new Date(scheduleConfig.vacation_until) : null;
+      const isInVacation =
+        (!vacFrom && !vacUntil) ||
+        (!vacFrom && vacUntil && selectedDate <= vacUntil) ||
+        (vacFrom && !vacUntil && selectedDate >= vacFrom) ||
+        (vacFrom && vacUntil && selectedDate >= vacFrom && selectedDate <= vacUntil);
+      if (isInVacation) return [];
+    }
+
+    const slots: TimeSlot[] = [];
+    const dayAppts = [...appointments].sort(
+      (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
+    );
+
+    for (const wh of dayWH) {
+      const [startH, startM] = wh.start_time.split(":").map(Number);
+      const [endH, endM] = wh.end_time.split(":").map(Number);
+      let current = new Date(selectedDate);
+      current.setHours(startH!, startM!, 0, 0);
+      const endTime = new Date(selectedDate);
+      endTime.setHours(endH!, endM!, 0, 0);
+
+      const lunchStart = scheduleConfig?.lunch_break_start
+        ? (() => { const [h, m] = scheduleConfig.lunch_break_start!.split(":").map(Number); const d = new Date(selectedDate); d.setHours(h!, m!, 0, 0); return d; })()
+        : null;
+      const lunchEnd = scheduleConfig?.lunch_break_end
+        ? (() => { const [h, m] = scheduleConfig.lunch_break_end!.split(":").map(Number); const d = new Date(selectedDate); d.setHours(h!, m!, 0, 0); return d; })()
+        : null;
+
+      while (current < endTime) {
+        const slotTime = format(current, "HH:mm");
+        const isLunch = lunchStart && lunchEnd && current >= lunchStart && current < lunchEnd;
+
+        if (!isLunch) {
+          const apt = dayAppts.find((a) => {
+            const aptStart = parseISO(a.starts_at);
+            return format(aptStart, "HH:mm") === slotTime && isSameDay(aptStart, selectedDate);
+          });
+          slots.push({ time: slotTime, appointment: apt ?? null });
+        }
+
+        current = addMinutes(current, slotDuration);
+      }
+    }
+
+    return slots;
+  }, [selectedDate, scheduleConfig, workingHours, appointments]);
+
+  const occupiedSlots = timeSlots.filter((s) => s.appointment !== null);
+  const freeSlots = timeSlots.filter((s) => s.appointment === null);
   const stats = {
-    total: sorted.length,
-    pending: sorted.filter((a) => a.status === "pending").length,
-    confirmed: sorted.filter((a) => a.status === "confirmed").length,
-    completed: sorted.filter((a) => a.status === "completed").length,
-    cancelled: sorted.filter((a) => a.status === "cancelled").length,
-    noShow: sorted.filter((a) => a.status === "no_show").length,
+    total: timeSlots.length,
+    free: freeSlots.length,
+    occupied: occupiedSlots.length,
+    occupancyPct: timeSlots.length > 0 ? Math.round((occupiedSlots.length / timeSlots.length) * 100) : 0,
   };
-
-  // Encontrar el turno actual o próximo
-  const now = new Date();
-  const currentAppointment = sorted.find(
-    (a) =>
-      (a.status === "confirmed" || a.status === "pending") &&
-      new Date(a.starts_at) <= now &&
-      new Date(a.ends_at) > now
-  );
-  const nextAppointment = sorted.find(
-    (a) =>
-      (a.status === "confirmed" || a.status === "pending") &&
-      new Date(a.starts_at) > now
-  );
 
   const handleStatusChange = async (apt: AppointmentWithRelations, newStatus: string) => {
     try {
@@ -94,262 +145,333 @@ export default function HoyPage() {
   };
 
   const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+  const isWorkDay = timeSlots.length > 0;
+
+  const workingRange = useMemo(() => {
+    if (timeSlots.length === 0) return "";
+    return `${timeSlots[0]!.time} - ${timeSlots[timeSlots.length - 1]!.time}`;
+  }, [timeSlots]);
 
   return (
-    <div className="space-y-6">
-      {/* Header con navegación de día */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isToday ? "Hoy" : format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
-          </h1>
-          <p className="text-sm text-muted-foreground capitalize">
-            {isToday && format(selectedDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
-            {!isToday && format(selectedDate, "yyyy", { locale: es })}
-          </p>
-        </div>
+    <div className="space-y-4">
+      {/* ─── Header con teal HisMe ─── */}
+      <div className="rounded-xl bg-gradient-to-r from-teal-600 to-teal-700 dark:from-teal-800 dark:to-teal-900 px-5 py-4 text-white shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-teal-200 text-[10px] font-bold uppercase tracking-widest">
+              Agenda Diaria
+            </p>
+            <h1 className="text-xl font-bold capitalize">
+              {isToday ? "Hoy" : format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
+            </h1>
+            {isWorkDay && workingRange && (
+              <p className="text-teal-100 text-xs mt-0.5">
+                {workingRange} · Turnos de {scheduleConfig?.slot_duration ?? 30} min
+              </p>
+            )}
+          </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setSelectedDate(new Date())}>
-            Hoy
-          </Button>
-          <div className="flex items-center rounded-md border">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg bg-white/10 backdrop-blur-sm">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
+                onClick={() => setSelectedDate((d) => subDays(d, 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="px-2 text-sm font-medium min-w-[90px] text-center">
+                {format(selectedDate, "dd/MM/yyyy")}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
+                onClick={() => setSelectedDate((d) => addDays(d, 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSelectedDate((d) => subDays(d, 1))}
+              size="sm"
+              className={cn(
+                "h-8 text-xs",
+                isToday
+                  ? "bg-white text-teal-700 hover:bg-white/90"
+                  : "bg-white/10 text-white hover:bg-white/20"
+              )}
+              onClick={() => setSelectedDate(new Date())}
             >
-              <ChevronLeft className="h-4 w-4" />
+              Hoy
             </Button>
+
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
-              onClick={() => setSelectedDate((d) => addDays(d, 1))}
+              className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
+              onClick={() => loadDay(selectedDate)}
             >
-              <ChevronRight className="h-4 w-4" />
+              <RefreshCw className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Estadísticas rápidas */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Card>
-          <CardContent className="flex flex-col items-center p-3">
-            <span className="text-2xl font-bold">{stats.total}</span>
-            <span className="text-xs text-muted-foreground">Total</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex flex-col items-center p-3">
-            <span className="text-2xl font-bold text-amber-500">{stats.pending}</span>
-            <span className="text-xs text-muted-foreground">Pendientes</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex flex-col items-center p-3">
-            <span className="text-2xl font-bold text-blue-500">{stats.confirmed}</span>
-            <span className="text-xs text-muted-foreground">Confirmados</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex flex-col items-center p-3">
-            <span className="text-2xl font-bold text-emerald-500">{stats.completed}</span>
-            <span className="text-xs text-muted-foreground">Completados</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex flex-col items-center p-3">
-            <span className="text-2xl font-bold text-red-500">{stats.cancelled}</span>
-            <span className="text-xs text-muted-foreground">Cancelados</span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex flex-col items-center p-3">
-            <span className="text-2xl font-bold text-gray-500">{stats.noShow}</span>
-            <span className="text-xs text-muted-foreground">Ausentes</span>
-          </CardContent>
-        </Card>
-      </div>
+      {/* ─── Stats bar estilo HisMe ─── */}
+      {isWorkDay && (
+        <div className="flex items-center gap-3 flex-wrap text-sm">
+          <div className="flex items-center gap-2 bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 rounded-lg px-3 py-1.5 font-medium">
+            <CalendarCheck className="h-3.5 w-3.5" />
+            <span>{stats.occupied} turnos</span>
+          </div>
+          <div className="flex items-center gap-2 bg-cyan-50 dark:bg-cyan-950/30 text-cyan-700 dark:text-cyan-300 rounded-lg px-3 py-1.5 font-medium">
+            <Clock className="h-3.5 w-3.5" />
+            <span>{stats.free} libres</span>
+          </div>
 
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          {/* Barra de ocupación */}
+          <div className="flex items-center gap-2 flex-1 min-w-[150px]">
+            <div className="flex-1 h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${stats.occupancyPct}%`,
+                  background: stats.occupancyPct > 80
+                    ? "linear-gradient(90deg, #f59e0b, #ef4444)"
+                    : stats.occupancyPct > 50
+                      ? "linear-gradient(90deg, #14b8a6, #f59e0b)"
+                      : "linear-gradient(90deg, #06b6d4, #14b8a6)",
+                }}
+              />
+            </div>
+            <span className="text-xs font-bold text-muted-foreground">{stats.occupancyPct}%</span>
+          </div>
         </div>
       )}
 
-      {/* Lista vacía */}
-      {!loading && sorted.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center py-12">
-            <CalendarCheck className="h-12 w-12 text-muted-foreground/50" />
-            <p className="mt-3 font-medium">Sin turnos para este día</p>
-            <p className="text-sm text-muted-foreground">
-              No hay turnos programados.
-            </p>
-          </CardContent>
-        </Card>
+      {/* ─── Loading ─── */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
+        </div>
       )}
 
-      {/* Lista de turnos */}
-      {!loading && sorted.length > 0 && (
-        <div className="space-y-2">
-          {sorted.map((apt) => {
-            const statusConf = STATUS_CONFIG[apt.status] ?? STATUS_CONFIG["pending"]!;
-            const StatusIcon = statusConf.icon;
-            const isExpanded = expandedId === apt.id;
-            const isCurrent = currentAppointment?.id === apt.id;
-            const isNext = nextAppointment?.id === apt.id && !currentAppointment;
-            const aptPast = isPast(parseISO(apt.ends_at));
+      {/* ─── Día no laboral ─── */}
+      {!loading && !isWorkDay && (
+        <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-16 text-center">
+          <CalendarCheck className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600" />
+          <p className="mt-4 text-lg font-medium text-muted-foreground">Día no laboral</p>
+          <p className="text-sm text-muted-foreground/60 mt-1">
+            No hay horarios de atención configurados para este día
+          </p>
+        </div>
+      )}
+
+      {/* ─── Grilla de slots HisMe ─── */}
+      {/* ─── Modal de crear turno ─── */}
+      <CreateAppointmentModal
+        open={createModal.open}
+        onOpenChange={(open) => setCreateModal({ open })}
+        onSuccess={() => loadDay(selectedDate)}
+        initialDate={selectedDate}
+        initialTime={createModal.time}
+      />
+
+      {!loading && isWorkDay && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {timeSlots.map((slot) => {
+            const apt = slot.appointment;
+            const isExpanded = expandedSlot === slot.time;
+
+            if (!apt) {
+              // ─── Slot disponible ─── Teal como HisMe — click abre modal de agendar
+              return (
+                <div
+                  key={slot.time}
+                  className="group flex items-center gap-3 rounded-lg bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 px-3.5 py-2.5 transition-all hover:bg-teal-100 dark:hover:bg-teal-950/40 hover:border-teal-400 cursor-pointer"
+                  onClick={() => setCreateModal({ open: true, time: slot.time })}
+                >
+                  <span className="text-sm font-mono font-bold text-teal-700 dark:text-teal-300 w-11">
+                    {slot.time}
+                  </span>
+                  <span className="text-sm font-semibold text-teal-600 dark:text-teal-400">
+                    Disponible
+                  </span>
+                  <span className="ml-auto flex items-center gap-1 text-[11px] text-transparent group-hover:text-teal-500 transition-colors">
+                    <CalendarPlus className="h-3 w-3" />
+                    Agendar
+                  </span>
+                </div>
+              );
+            }
+
+            // ─── Slot ocupado ─── Colores por estado
+            const isCancelled = apt.status === "cancelled";
+            const isNoShow = apt.status === "no_show";
+            const isCompleted = apt.status === "completed";
+            const isPending = apt.status === "pending";
+
+            // Paleta HisMe: naranja/ámbar para turnos ocupados, variantes por estado
+            const cardStyles = isCancelled
+              ? "border-l-red-400 bg-red-50/60 dark:bg-red-950/15 border-red-200 dark:border-red-800 opacity-60"
+              : isNoShow
+                ? "border-l-rose-500 bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800"
+                : isCompleted
+                  ? "border-l-sky-500 bg-sky-50/60 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800"
+                  : isPending
+                    ? "border-l-amber-500 bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                    : "border-l-teal-500 bg-teal-50/60 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800";
+
+            const statusBadge = isCancelled
+              ? { label: "Cancelado", cls: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" }
+              : isNoShow
+                ? { label: "Ausente", cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" }
+                : isCompleted
+                  ? { label: "Atendido", cls: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300" }
+                  : isPending
+                    ? { label: "Pendiente", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" }
+                    : { label: "Confirmado", cls: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300" };
 
             return (
-              <Card
-                key={apt.id}
+              <div
+                key={slot.time}
                 className={cn(
-                  "transition-all cursor-pointer hover:shadow-md",
-                  isCurrent && "ring-2 ring-primary",
-                  isNext && "ring-2 ring-accent",
-                  apt.status === "cancelled" && "opacity-50"
+                  "rounded-lg border border-l-4 overflow-hidden transition-all cursor-pointer hover:shadow-md",
+                  cardStyles,
+                  isExpanded && "ring-2 ring-teal-400/40"
                 )}
-                onClick={() => setExpandedId(isExpanded ? null : apt.id)}
+                onClick={() => setExpandedSlot(isExpanded ? null : slot.time)}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    {/* Hora */}
-                    <div className="text-center">
-                      <p className="text-lg font-bold">
-                        {format(parseISO(apt.starts_at), "HH:mm")}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(parseISO(apt.ends_at), "HH:mm")}
-                      </p>
-                    </div>
-
-                    {/* Línea separadora */}
-                    <div className={cn(
-                      "h-12 w-0.5 rounded-full",
-                      isCurrent ? "bg-primary" : "bg-border"
-                    )} />
-
-                    {/* Info del paciente */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium truncate">{apt.patient.full_name}</p>
-                        {isCurrent && (
-                          <Badge variant="default" className="text-[10px]">EN CURSO</Badge>
-                        )}
-                        {isNext && !isCurrent && (
-                          <Badge variant="outline" className="text-[10px]">SIGUIENTE</Badge>
-                        )}
-                      </div>
-                      {apt.service && (
-                        <p className="text-sm text-muted-foreground truncate">
-                          {apt.service.name}
-                          {apt.service.duration_minutes && ` · ${apt.service.duration_minutes} min`}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Estado */}
-                    <Badge variant={statusConf.variant}>
-                      <StatusIcon className="mr-1 h-3 w-3" />
-                      {statusConf.label}
-                    </Badge>
+                <div className="px-3.5 py-2.5">
+                  {/* Fila: Hora + Nombre + Badge */}
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-sm font-mono font-bold text-foreground/80 w-11 shrink-0">
+                      {slot.time}
+                    </span>
+                    <p className={cn(
+                      "font-bold text-sm truncate flex-1 text-foreground",
+                      isCancelled && "line-through opacity-60"
+                    )}>
+                      {apt.patient.full_name.toUpperCase()}
+                    </p>
+                    <span className={cn("shrink-0 px-2 py-0.5 rounded text-[10px] font-bold", statusBadge.cls)}>
+                      {statusBadge.label}
+                    </span>
                   </div>
 
-                  {/* Detalle expandido */}
-                  {isExpanded && (
-                    <div className="mt-4 border-t pt-4 space-y-3">
-                      {/* Contacto */}
-                      <div className="flex flex-wrap gap-4 text-sm">
-                        {apt.patient.phone && (
-                          <a
-                            href={`tel:${apt.patient.phone}`}
-                            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Phone className="h-3.5 w-3.5" />
-                            {apt.patient.phone}
-                          </a>
-                        )}
-                        {apt.patient.email && (
-                          <a
-                            href={`mailto:${apt.patient.email}`}
-                            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Mail className="h-3.5 w-3.5" />
-                            {apt.patient.email}
-                          </a>
-                        )}
-                      </div>
+                  {/* Servicio + Modalidad */}
+                  <div className="flex items-center gap-2 mt-1 pl-[52px]">
+                    {apt.service && (
+                      <span className="text-xs text-muted-foreground truncate">
+                        {apt.service.name}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground/40">·</span>
+                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {format(parseISO(apt.starts_at), "HH:mm")}–{format(parseISO(apt.ends_at), "HH:mm")}
+                    </span>
+                    {apt.modality === "virtual" && (
+                      <Video className="h-3 w-3 text-blue-500 shrink-0" />
+                    )}
+                  </div>
 
-                      {/* Notas */}
-                      {apt.notes && (
-                        <p className="text-sm text-muted-foreground bg-muted/50 rounded-md p-2">
-                          {apt.notes}
-                        </p>
-                      )}
-
-                      {/* Acciones rápidas */}
-                      {apt.status !== "cancelled" && apt.status !== "completed" && (
-                        <div className="flex flex-wrap gap-2">
-                          {apt.status === "pending" && (
-                            <Button
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStatusChange(apt, "confirmed");
-                              }}
-                            >
-                              <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                              Confirmar
-                            </Button>
-                          )}
-                          {(apt.status === "pending" || apt.status === "confirmed") && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStatusChange(apt, "completed");
-                                }}
-                              >
-                                Completar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStatusChange(apt, "no_show");
-                                }}
-                              >
-                                Ausente
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStatusChange(apt, "cancelled");
-                                }}
-                              >
-                                <XCircle className="mr-1 h-3.5 w-3.5" />
-                                Cancelar
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      )}
+                  {/* Teléfono */}
+                  {apt.patient.phone && (
+                    <div className="flex items-center gap-1 mt-1 pl-[52px]">
+                      <Phone className="h-3 w-3 text-muted-foreground/40" />
+                      <span className="text-[11px] text-muted-foreground">{apt.patient.phone}</span>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+
+                {/* ─── Detalle expandido ─── */}
+                {isExpanded && (
+                  <div className="border-t border-inherit px-3.5 py-3 bg-white/60 dark:bg-black/10 space-y-2.5">
+                    {/* Contacto */}
+                    <div className="flex flex-wrap gap-3 text-xs">
+                      {apt.patient.phone && (
+                        <a
+                          href={`tel:${apt.patient.phone}`}
+                          className="flex items-center gap-1 text-teal-600 hover:text-teal-800 dark:text-teal-400 font-medium"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Phone className="h-3 w-3" />
+                          Llamar
+                        </a>
+                      )}
+                      {apt.patient.email && (
+                        <a
+                          href={`mailto:${apt.patient.email}`}
+                          className="flex items-center gap-1 text-teal-600 hover:text-teal-800 dark:text-teal-400 font-medium"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Mail className="h-3 w-3" />
+                          Email
+                        </a>
+                      )}
+                    </div>
+
+                    {apt.notes && (
+                      <p className="text-xs text-muted-foreground bg-gray-50 dark:bg-gray-900/50 rounded p-2 italic">
+                        {apt.notes}
+                      </p>
+                    )}
+
+                    {/* Acciones rápidas */}
+                    {apt.status !== "cancelled" && apt.status !== "completed" && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {/* Botón ATENDER — abre Historia Clínica del paciente */}
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs bg-teal-600 hover:bg-teal-700"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/dashboard/pacientes/${apt.patient.id}/historia-clinica`);
+                          }}
+                        >
+                          <Stethoscope className="mr-1 h-3 w-3" />
+                          Atender
+                        </Button>
+                        {apt.status === "pending" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-teal-300 text-teal-700 hover:bg-teal-50 dark:border-teal-700 dark:text-teal-300 dark:hover:bg-teal-950/30"
+                            onClick={(e) => { e.stopPropagation(); handleStatusChange(apt, "confirmed"); }}
+                          >
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
+                            Confirmar
+                          </Button>
+                        )}
+                        {(apt.status === "pending" || apt.status === "confirmed") && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={(e) => { e.stopPropagation(); handleStatusChange(apt, "no_show"); }}
+                            >
+                              Ausente
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-7 text-xs"
+                              onClick={(e) => { e.stopPropagation(); handleStatusChange(apt, "cancelled"); }}
+                            >
+                              <XCircle className="mr-1 h-3 w-3" />
+                              Cancelar
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

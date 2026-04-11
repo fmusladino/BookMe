@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { Stethoscope, User, ChevronRight } from "lucide-react";
+import { Stethoscope, User, ChevronRight, Store } from "lucide-react";
 
 // Especialidades sugeridas por línea
 const SPECIALTIES: Record<string, string[]> = {
@@ -34,9 +34,23 @@ const SPECIALTIES: Record<string, string[]> = {
   ],
 };
 
+const BUSINESS_TYPES = [
+  "Canchas de fútbol",
+  "Canchas de pádel",
+  "Canchas de tenis",
+  "Canchas multideporte",
+  "Restaurante",
+  "Bar / Cervecería",
+  "Cafetería",
+  "Salón de eventos",
+  "Coworking",
+  "Estudio de grabación",
+  "Otro",
+];
+
 export default function RegisterPage() {
   // Step 1: Tipo de cuenta
-  const [accountType, setAccountType] = useState<"patient" | "professional" | null>(null);
+  const [accountType, setAccountType] = useState<"patient" | "professional" | "canchas" | null>(null);
 
   // Datos comunes
   const [fullName, setFullName] = useState("");
@@ -50,6 +64,18 @@ export default function RegisterPage() {
   const [line, setLine] = useState<"healthcare" | "business">("healthcare");
   const [specialty, setSpecialty] = useState("");
   const [customSpecialty, setCustomSpecialty] = useState("");
+
+  // Datos de canchas
+  const [businessName, setBusinessName] = useState("");
+  const [sport, setSport] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+
+  // Ubicación del consultorio/local/complejo
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [province, setProvince] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [country, setCountry] = useState("AR");
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -76,6 +102,17 @@ export default function RegisterPage() {
     if (accountType === "professional") {
       const finalSpecialty = specialty === "__custom" ? customSpecialty : specialty;
       if (!finalSpecialty.trim()) { showError("La especialidad es requerida"); return false; }
+      if (!address.trim()) { showError("La dirección del consultorio es requerida"); return false; }
+      if (!city.trim()) { showError("La localidad es requerida"); return false; }
+      if (!province.trim()) { showError("La provincia es requerida"); return false; }
+      if (!postalCode.trim()) { showError("El código postal es requerido"); return false; }
+      if (!country.trim()) { showError("El país es requerido"); return false; }
+    }
+
+    if (accountType === "canchas") {
+      if (!businessName.trim()) { showError("El nombre del comercio es requerido"); return false; }
+      if (!city.trim()) { showError("La localidad es requerida"); return false; }
+      if (!province.trim()) { showError("La provincia es requerida"); return false; }
     }
 
     return true;
@@ -105,6 +142,21 @@ export default function RegisterPage() {
           ...(accountType === "professional" && {
             line,
             specialty: finalSpecialty,
+            address,
+            city,
+            province,
+            postal_code: postalCode,
+            country,
+          }),
+          ...(accountType === "canchas" && {
+            business_name: businessName,
+            sport,
+            whatsapp,
+            address,
+            city,
+            province,
+            postal_code: postalCode,
+            country,
           }),
         }),
       });
@@ -125,13 +177,21 @@ export default function RegisterPage() {
         return;
       }
 
+      const redirectMap = {
+        professional: "/dashboard",
+        patient: "/mis-turnos",
+        canchas: "/canchas",
+      };
+
       setSuccess(
-        accountType === "professional"
-          ? "Registro exitoso. Redirigiendo a tu panel profesional..."
-          : "Registro exitoso. Redirigiendo..."
+        accountType === "canchas"
+          ? "Registro exitoso. Redirigiendo a tu panel de canchas..."
+          : accountType === "professional"
+            ? "Registro exitoso. Redirigiendo a tu panel profesional..."
+            : "Registro exitoso. Redirigiendo..."
       );
 
-      const redirect = data.redirect ?? (accountType === "professional" ? "/dashboard" : "/mis-turnos");
+      const redirect = data.redirect ?? redirectMap[accountType as keyof typeof redirectMap] ?? "/";
       setTimeout(() => { window.location.href = redirect; }, 1500);
     } catch {
       showError("Error al registrarse");
@@ -152,7 +212,7 @@ export default function RegisterPage() {
   if (accountType === null) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-lg space-y-8">
+        <div className="w-full max-w-2xl space-y-8">
           <div className="text-center">
             <h1 className="text-4xl font-heading font-bold text-bookme-navy dark:text-bookme-mint">BookMe</h1>
             <p className="mt-2 text-muted-foreground text-sm">Creá tu cuenta para empezar</p>
@@ -168,7 +228,7 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {/* Profesional */}
               <button
                 onClick={() => setAccountType("professional")}
@@ -180,7 +240,7 @@ export default function RegisterPage() {
                 <div>
                   <p className="font-semibold text-foreground">Soy Profesional</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Médico, psicólogo, peluquero, coach, abogado...
+                    Médico, psicólogo, peluquero, coach...
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-medium text-blue-600 dark:text-blue-400">
@@ -206,6 +266,25 @@ export default function RegisterPage() {
                   Gratis para siempre <ChevronRight className="h-3 w-3 ml-0.5" />
                 </span>
               </button>
+
+              {/* Canchas */}
+              <button
+                onClick={() => setAccountType("canchas")}
+                className="group relative flex flex-col items-center gap-3 rounded-xl border-2 border-border bg-background p-6 text-center transition-all hover:border-orange-500 hover:bg-orange-50/50 hover:shadow-md dark:hover:border-orange-400 dark:hover:bg-orange-950/30"
+              >
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/50 transition-colors group-hover:bg-orange-200 dark:group-hover:bg-orange-900">
+                  <Store className="h-7 w-7 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Tengo un Comercio</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Canchas, restaurantes, bares y más
+                  </p>
+                </div>
+                <span className="inline-flex items-center text-xs font-medium text-orange-600 dark:text-orange-400">
+                  30 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
+                </span>
+              </button>
             </div>
 
             <div className="text-center text-sm">
@@ -222,7 +301,14 @@ export default function RegisterPage() {
 
   // ─── Step 2: Formulario de registro ─────────────────────────
   const isProfessional = accountType === "professional";
-  const accentColor = isProfessional ? "blue" : "emerald";
+  const isCanchas = accountType === "canchas";
+
+  const accentColors = {
+    professional: "blue",
+    patient: "emerald",
+    canchas: "orange",
+  };
+  const accentColor = accentColors[accountType];
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -231,7 +317,11 @@ export default function RegisterPage() {
         <div className="text-center">
           <h1 className="text-4xl font-heading font-bold text-bookme-navy dark:text-bookme-mint">BookMe</h1>
           <p className="mt-2 text-muted-foreground text-sm">
-            {isProfessional ? "Registro profesional — 30 días gratis" : "Reservá tus turnos online"}
+            {isProfessional
+              ? "Registro profesional — 30 días gratis"
+              : isCanchas
+                ? "Registro de canchas — 30 días gratis"
+                : "Reservá tus turnos online"}
           </p>
         </div>
 
@@ -240,12 +330,18 @@ export default function RegisterPage() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h2 className="text-xl font-heading font-semibold text-foreground">
-                {isProfessional ? "Registro profesional" : "Crear cuenta"}
+                {isProfessional
+                  ? "Registro profesional"
+                  : isCanchas
+                    ? "Registro de canchas"
+                    : "Crear cuenta"}
               </h2>
               <p className="text-sm text-muted-foreground">
                 {isProfessional
                   ? "Completá tus datos para activar tu trial de 30 días"
-                  : "Registrate para reservar turnos"
+                  : isCanchas
+                    ? "Configurá tu comercio y empezá a recibir reservas"
+                    : "Registrate para reservar turnos"
                 }
               </p>
             </div>
@@ -263,41 +359,45 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* Google */}
-          <button
-            type="button"
-            onClick={handleGoogleRegister}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-            </svg>
-            Registrarse con Google
-          </button>
+          {/* Google (solo para profesionales y pacientes) */}
+          {!isCanchas && (
+            <>
+              <button
+                type="button"
+                onClick={handleGoogleRegister}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+                Registrarse con Google
+              </button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">o</span>
-            </div>
-          </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">o</span>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Formulario */}
           <form onSubmit={handleRegister} className="space-y-4">
             {/* Nombre */}
             <div className="space-y-1.5">
               <label htmlFor="fullName" className="text-sm font-medium text-foreground">
-                Nombre completo
+                {isCanchas ? "Tu nombre completo" : "Nombre completo"}
               </label>
               <input
                 id="fullName" type="text" autoComplete="name"
-                placeholder={isProfessional ? "Dr. Juan Pérez" : "Juan Pérez"}
+                placeholder={isProfessional ? "Dr. Juan Pérez" : isCanchas ? "Juan Pérez" : "Juan Pérez"}
                 value={fullName} onChange={(e) => setFullName(e.target.value)}
                 required disabled={loading}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
@@ -337,7 +437,7 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* Contraseñas en 2 columnas */}
+            {/* Contraseñas */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label htmlFor="password" className="text-sm font-medium text-foreground">Contraseña</label>
@@ -424,10 +524,237 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {/* Beneficio trial */}
+                {/* Ubicación del consultorio */}
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide pt-2">
+                  Ubicación del consultorio
+                </p>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="address" className="text-sm font-medium text-foreground">Dirección</label>
+                  <input
+                    id="address" type="text" autoComplete="street-address"
+                    placeholder="Av. Corrientes 1234, Piso 3, Of. B"
+                    value={address} onChange={(e) => setAddress(e.target.value)}
+                    required disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2 space-y-1.5">
+                    <label htmlFor="city" className="text-sm font-medium text-foreground">Localidad</label>
+                    <input
+                      id="city" type="text" autoComplete="address-level2" placeholder="Rosario"
+                      value={city} onChange={(e) => setCity(e.target.value)}
+                      required disabled={loading}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="postalCode" className="text-sm font-medium text-foreground">CP</label>
+                    <input
+                      id="postalCode" type="text" autoComplete="postal-code" placeholder="2000"
+                      value={postalCode} onChange={(e) => setPostalCode(e.target.value)}
+                      required disabled={loading}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label htmlFor="province" className="text-sm font-medium text-foreground">Provincia</label>
+                    <select
+                      id="province" value={province} onChange={(e) => setProvince(e.target.value)}
+                      required disabled={loading}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                    >
+                      <option value="">Seleccioná...</option>
+                      <option value="Buenos Aires">Buenos Aires</option>
+                      <option value="CABA">CABA</option>
+                      <option value="Catamarca">Catamarca</option>
+                      <option value="Chaco">Chaco</option>
+                      <option value="Chubut">Chubut</option>
+                      <option value="Córdoba">Córdoba</option>
+                      <option value="Corrientes">Corrientes</option>
+                      <option value="Entre Ríos">Entre Ríos</option>
+                      <option value="Formosa">Formosa</option>
+                      <option value="Jujuy">Jujuy</option>
+                      <option value="La Pampa">La Pampa</option>
+                      <option value="La Rioja">La Rioja</option>
+                      <option value="Mendoza">Mendoza</option>
+                      <option value="Misiones">Misiones</option>
+                      <option value="Neuquén">Neuquén</option>
+                      <option value="Río Negro">Río Negro</option>
+                      <option value="Salta">Salta</option>
+                      <option value="San Juan">San Juan</option>
+                      <option value="San Luis">San Luis</option>
+                      <option value="Santa Cruz">Santa Cruz</option>
+                      <option value="Santa Fe">Santa Fe</option>
+                      <option value="Santiago del Estero">Santiago del Estero</option>
+                      <option value="Tierra del Fuego">Tierra del Fuego</option>
+                      <option value="Tucumán">Tucumán</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="country" className="text-sm font-medium text-foreground">País</label>
+                    <select
+                      id="country" value={country} onChange={(e) => setCountry(e.target.value)}
+                      required disabled={loading}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                    >
+                      <option value="AR">Argentina</option>
+                      <option value="UY">Uruguay</option>
+                      <option value="CL">Chile</option>
+                      <option value="CO">Colombia</option>
+                      <option value="MX">México</option>
+                      <option value="PE">Perú</option>
+                      <option value="BR">Brasil</option>
+                      <option value="PY">Paraguay</option>
+                      <option value="BO">Bolivia</option>
+                      <option value="EC">Ecuador</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2 rounded-md bg-blue-100 dark:bg-blue-900/40 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
                   <span className="font-bold text-base">30</span>
                   <span>días de prueba gratis con todas las funcionalidades del plan Standard.</span>
+                </div>
+              </div>
+            )}
+
+            {/* ── Campos extra para canchas ── */}
+            {isCanchas && (
+              <div className="space-y-4 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20 p-4">
+                <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 uppercase tracking-wide">
+                  Datos del comercio
+                </p>
+
+                {/* Nombre del comercio */}
+                <div className="space-y-1.5">
+                  <label htmlFor="businessName" className="text-sm font-medium text-foreground">
+                    Nombre del comercio
+                  </label>
+                  <input
+                    id="businessName" type="text"
+                    placeholder="Ej: Club Deportivo Los Pinos, Restaurante El Roble"
+                    value={businessName} onChange={(e) => setBusinessName(e.target.value)}
+                    required disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Tipo de comercio */}
+                <div className="space-y-1.5">
+                  <label htmlFor="sport" className="text-sm font-medium text-foreground">
+                    Tipo de comercio (opcional)
+                  </label>
+                  <select
+                    id="sport"
+                    value={sport}
+                    onChange={(e) => setSport(e.target.value)}
+                    disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  >
+                    <option value="">Seleccioná el tipo de comercio...</option>
+                    {BUSINESS_TYPES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* WhatsApp */}
+                <div className="space-y-1.5">
+                  <label htmlFor="whatsapp" className="text-sm font-medium text-foreground">
+                    WhatsApp del comercio (opcional)
+                  </label>
+                  <input
+                    id="whatsapp" type="tel"
+                    placeholder="+54 9 11 1234-5678"
+                    value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)}
+                    disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Ubicación */}
+                <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 uppercase tracking-wide pt-2">
+                  Ubicación del comercio
+                </p>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="address-c" className="text-sm font-medium text-foreground">
+                    Dirección (opcional)
+                  </label>
+                  <input
+                    id="address-c" type="text"
+                    placeholder="Av. San Martín 1500"
+                    value={address} onChange={(e) => setAddress(e.target.value)}
+                    disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2 space-y-1.5">
+                    <label htmlFor="city-c" className="text-sm font-medium text-foreground">Localidad</label>
+                    <input
+                      id="city-c" type="text" placeholder="Rosario"
+                      value={city} onChange={(e) => setCity(e.target.value)}
+                      required disabled={loading}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="postalCode-c" className="text-sm font-medium text-foreground">CP</label>
+                    <input
+                      id="postalCode-c" type="text" placeholder="2000"
+                      value={postalCode} onChange={(e) => setPostalCode(e.target.value)}
+                      disabled={loading}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="province-c" className="text-sm font-medium text-foreground">Provincia</label>
+                  <select
+                    id="province-c" value={province} onChange={(e) => setProvince(e.target.value)}
+                    required disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  >
+                    <option value="">Seleccioná...</option>
+                    <option value="Buenos Aires">Buenos Aires</option>
+                    <option value="CABA">CABA</option>
+                    <option value="Catamarca">Catamarca</option>
+                    <option value="Chaco">Chaco</option>
+                    <option value="Chubut">Chubut</option>
+                    <option value="Córdoba">Córdoba</option>
+                    <option value="Corrientes">Corrientes</option>
+                    <option value="Entre Ríos">Entre Ríos</option>
+                    <option value="Formosa">Formosa</option>
+                    <option value="Jujuy">Jujuy</option>
+                    <option value="La Pampa">La Pampa</option>
+                    <option value="La Rioja">La Rioja</option>
+                    <option value="Mendoza">Mendoza</option>
+                    <option value="Misiones">Misiones</option>
+                    <option value="Neuquén">Neuquén</option>
+                    <option value="Río Negro">Río Negro</option>
+                    <option value="Salta">Salta</option>
+                    <option value="San Juan">San Juan</option>
+                    <option value="San Luis">San Luis</option>
+                    <option value="Santa Cruz">Santa Cruz</option>
+                    <option value="Santa Fe">Santa Fe</option>
+                    <option value="Santiago del Estero">Santiago del Estero</option>
+                    <option value="Tierra del Fuego">Tierra del Fuego</option>
+                    <option value="Tucumán">Tucumán</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 rounded-md bg-orange-100 dark:bg-orange-900/40 px-3 py-2 text-xs text-orange-700 dark:text-orange-300">
+                  <span className="font-bold text-base">30</span>
+                  <span>días de prueba gratis. Configurá tus canchas, horarios y empezá a recibir reservas online.</span>
                 </div>
               </div>
             )}
@@ -449,7 +776,9 @@ export default function RegisterPage() {
                 ? "Registrando..."
                 : isProfessional
                   ? "Crear cuenta y empezar trial"
-                  : "Crear cuenta"
+                  : isCanchas
+                    ? "Crear cuenta de canchas"
+                    : "Crear cuenta"
               }
             </button>
           </form>
