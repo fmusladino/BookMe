@@ -64,9 +64,18 @@ interface PrestacionStats {
   byInsurance: Array<{ name: string; total: number; count: number }>;
 }
 
+interface Service {
+  id: string;
+  name: string;
+  description: string | null;
+  duration_minutes: number;
+  is_active: boolean;
+  service_insurances?: Array<{ insurance_id: string }>;
+}
+
 interface FormData {
   insurance_id: string;
-  code: string;
+  service_id: string;
   description: string;
   amount: string;
   valid_from: string;
@@ -75,7 +84,7 @@ interface FormData {
 
 const emptyForm: FormData = {
   insurance_id: "",
-  code: "",
+  service_id: "",
   description: "",
   amount: "",
   valid_from: new Date().toISOString().split("T")[0],
@@ -90,6 +99,7 @@ export default function PrestacionesPage() {
   const { user, loading: userLoading } = useSession();
   const [prestaciones, setPrestaciones] = useState<Prestacion[]>([]);
   const [insurances, setInsurances] = useState<Insurance[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [stats, setStats] = useState<PrestacionStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,10 +126,11 @@ export default function PrestacionesPage() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [prestRes, insRes, statsRes] = await Promise.all([
+      const [prestRes, insRes, statsRes, svcRes] = await Promise.all([
         fetch("/api/prestaciones"),
         fetch("/api/professionals/me/insurances"),
         fetch("/api/prestaciones/stats"),
+        fetch("/api/services"),
       ]);
 
       if (prestRes.ok) {
@@ -133,6 +144,10 @@ export default function PrestacionesPage() {
       if (statsRes.ok) {
         const d = (await statsRes.json()) as PrestacionStats;
         setStats(d);
+      }
+      if (svcRes.ok) {
+        const d = (await svcRes.json()) as { services: Service[] };
+        setServices((d.services ?? []).filter((s) => s.is_active !== false));
       }
     } catch (err) {
       console.error("Error loading prestaciones:", err);
@@ -183,9 +198,11 @@ export default function PrestacionesPage() {
 
   const openEdit = (p: Prestacion) => {
     setEditingId(p.id);
+    // Intentar encontrar el servicio que matchea por descripción
+    const matchedService = services.find((s) => s.name === p.description);
     setForm({
       insurance_id: p.insurance_id,
-      code: p.code,
+      service_id: matchedService?.id || "",
       description: p.description,
       amount: String(p.amount),
       valid_from: p.valid_from,
@@ -196,7 +213,10 @@ export default function PrestacionesPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.insurance_id || !form.code || !form.description || !form.amount) {
+    const description = form.service_id
+      ? services.find((s) => s.id === form.service_id)?.name || form.description
+      : form.description;
+    if (!form.insurance_id || !description || !form.amount) {
       toast.error("Completá todos los campos obligatorios");
       return;
     }
@@ -205,8 +225,8 @@ export default function PrestacionesPage() {
     try {
       const payload = {
         insurance_id: form.insurance_id,
-        code: form.code,
-        description: form.description,
+        code: form.service_id || "SIN-COD",
+        description,
         amount: Number(form.amount),
         valid_from: form.valid_from || undefined,
         valid_until: form.valid_until || null,
@@ -613,7 +633,7 @@ export default function PrestacionesPage() {
               <Label>Obra Social / Prepaga *</Label>
               <Select
                 value={form.insurance_id}
-                onChange={(e) => setForm((f) => ({ ...f, insurance_id: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, insurance_id: e.target.value, service_id: "" }))}
               >
                 <option value="">
                   {insurances.length === 0 ? "No tenés obras sociales cargadas" : "Seleccionar..."}
@@ -635,25 +655,66 @@ export default function PrestacionesPage() {
               )}
             </div>
 
-            {/* Código + Descripción */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Servicio — filtrado por OS seleccionada */}
+            {form.insurance_id && (
               <div className="space-y-2">
-                <Label>Código *</Label>
-                <Input
-                  placeholder="Ej: 420101"
-                  value={form.code}
-                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                />
+                <Label>Servicio *</Label>
+                {(() => {
+                  // Servicios vinculados a esta OS
+                  const linkedServices = services.filter((s) =>
+                    s.service_insurances?.some((si) => si.insurance_id === form.insurance_id)
+                  );
+                  // Servicios NO vinculados a esta OS
+                  const otherServices = services.filter(
+                    (s) => !s.service_insurances?.some((si) => si.insurance_id === form.insurance_id)
+                  );
+
+                  return (
+                    <>
+                      <Select
+                        value={form.service_id}
+                        onChange={(e) => {
+                          const svc = services.find((s) => s.id === e.target.value);
+                          setForm((f) => ({
+                            ...f,
+                            service_id: e.target.value,
+                            description: svc?.name || f.description,
+                          }));
+                        }}
+                      >
+                        <option value="">Seleccionar servicio...</option>
+                        {linkedServices.length > 0 && (
+                          <optgroup label="Vinculados a esta obra social">
+                            {linkedServices.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} ({s.duration_minutes} min)
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {otherServices.length > 0 && (
+                          <optgroup label="Otros servicios">
+                            {otherServices.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} ({s.duration_minutes} min)
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </Select>
+                      {linkedServices.length === 0 && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          No tenés servicios vinculados a esta obra social. Podés vincularlos desde{" "}
+                          <a href="/dashboard/servicios" className="underline font-medium">
+                            Servicios
+                          </a>.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Descripción *</Label>
-                <Input
-                  placeholder="Ej: Consulta médica general"
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </div>
-            </div>
+            )}
 
             {/* Valor */}
             <div className="space-y-2">
