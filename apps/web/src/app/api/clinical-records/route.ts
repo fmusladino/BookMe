@@ -305,6 +305,10 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("Error POST /api/clinical-records:", error);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json({
+      error: "Error al crear el registro clínico",
+      details: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.split("\n").slice(0, 3).join(" | ") : undefined,
+    }, { status: 500 });
   }
 }

@@ -117,12 +117,16 @@ export default function HistoriaClinicaPage() {
         ? `/api/clinical-records?patient_id=${patientId}&include_archived=true`
         : `/api/clinical-records?patient_id=${patientId}`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Error al cargar registros clínicos");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Error desconocido" })) as { error?: string; details?: string };
+        const msg = errBody.details || errBody.error || `Error ${res.status}`;
+        throw new Error(msg);
+      }
       const data = (await res.json()) as { records: ClinicalRecord[] };
       setRecords(data.records ?? []);
     } catch (error) {
       console.error("Error al cargar registros clínicos:", error);
-      toast.error("Error al cargar los registros clínicos");
+      toast.error(`Error HC: ${error instanceof Error ? error.message : "Error desconocido"}`);
     } finally {
       setLoading(false);
     }
@@ -194,7 +198,11 @@ export default function HistoriaClinicaPage() {
         }),
       });
 
-      if (!res.ok) throw new Error("Error al crear registro clínico");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ error: "Error desconocido" })) as { error?: string; details?: string };
+        const msg = errBody.details || errBody.error || `Error ${res.status}`;
+        throw new Error(msg);
+      }
 
       toast.success("Registro creado");
       setCreateModalOpen(false);
@@ -203,7 +211,7 @@ export default function HistoriaClinicaPage() {
       await fetchRecords();
     } catch (error) {
       console.error("Error al crear registro clínico:", error);
-      toast.error("Error al crear el registro clínico");
+      toast.error(`Error al crear registro clínico: ${error instanceof Error ? error.message : "Error desconocido"}`);
     } finally {
       setSubmitting(false);
     }
