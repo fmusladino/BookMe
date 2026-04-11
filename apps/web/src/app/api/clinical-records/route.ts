@@ -153,17 +153,18 @@ export async function GET(request: NextRequest) {
       "0.0.0.0";
 
     for (const record of encryptedRecords || []) {
-      await adminClient
-        .from("clinical_record_audit")
-        .insert({
-          record_id: record.id,
-          accessed_by: user.id,
-          action: "read",
-          ip_address: ipAddress,
-        })
-        .catch((err: unknown) => {
-          console.error(`Error registrando auditoría para ${record.id}:`, err);
-        });
+      try {
+        await adminClient
+          .from("clinical_record_audit")
+          .insert({
+            record_id: record.id,
+            accessed_by: user.id,
+            action: "read",
+            ip_address: ipAddress,
+          });
+      } catch (err: unknown) {
+        console.error(`Error registrando auditoría para ${record.id}:`, err);
+      }
     }
 
     return NextResponse.json({ records });
@@ -271,17 +272,18 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       "0.0.0.0";
 
-    await adminClient
-      .from("clinical_record_audit")
-      .insert({
-        record_id: record.id,
-        accessed_by: user.id,
-        action: "create",
-        ip_address: ipAddress,
-      })
-      .catch((err: unknown) => {
-        console.error("Error registrando auditoría CREATE:", err);
-      });
+    try {
+      await adminClient
+        .from("clinical_record_audit")
+        .insert({
+          record_id: record.id,
+          accessed_by: user.id,
+          action: "create",
+          ip_address: ipAddress,
+        });
+    } catch (err: unknown) {
+      console.error("Error registrando auditoría CREATE:", err);
+    }
 
     // Desencriptar para devolver en respuesta
     const decryptedContent = await decryptClinicalRecord(
