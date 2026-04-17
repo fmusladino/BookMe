@@ -16,6 +16,8 @@ import {
   MessageCircle,
   ClipboardList,
   Upload,
+  CreditCard,
+  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -52,7 +54,7 @@ const TOUR_STEPS: TourStep[] = [
     targetSelector: '[data-tour="nav-configuracion"]',
     title: "⭐ Primero: Configuración",
     description:
-      "Este es tu primer paso. Entrá a Configuración para definir tus días y horarios de trabajo, la duración de tus turnos, y cargar tus obras sociales.",
+      "Tu primer paso. Definí tus días y horarios, la duración de tus turnos, y tus obras sociales. 🆕 En cada franja horaria podés elegir la modalidad: Presencial, Virtual o Ambas. Por ejemplo: Lunes 9-14 Virtual, Martes 9-18 Ambas.",
     icon: <Settings className="h-4 w-4" />,
     position: "right",
     isCritical: true,
@@ -62,10 +64,28 @@ const TOUR_STEPS: TourStep[] = [
     targetSelector: '[data-tour="nav-servicios"]',
     title: "⭐ Segundo: Servicios",
     description:
-      "Después cargá tus servicios: el tipo de consulta o atención que ofrecés, la duración y el precio. Tus pacientes van a ver esto al reservar.",
+      "Cargá tus servicios: tipo de consulta, duración y precio. Cada servicio tiene una modalidad (Presencial, Virtual o Ambas). BookMe usa esto junto con la modalidad de tus franjas horarias para mostrar al paciente solo los horarios compatibles con lo que eligió.",
     icon: <FileText className="h-4 w-4" />,
     position: "right",
     isCritical: true,
+  },
+  {
+    id: "prestaciones",
+    targetSelector: '[data-tour="nav-prestaciones"]',
+    title: "Prestaciones y precios por obra social",
+    description:
+      "Cargá el valor de cada prestación por obra social o prepaga, con fechas de vigencia. Los pacientes con prepaga NO ven el precio en la cartilla; los particulares sí.",
+    icon: <ClipboardList className="h-4 w-4" />,
+    position: "right",
+  },
+  {
+    id: "facturacion",
+    targetSelector: '[data-tour="nav-facturacion"]',
+    title: "Facturación por obra social",
+    description:
+      "Al cierre del mes, BookMe te calcula el total a cobrar por cada prepaga/obra social usando tus prestaciones cargadas. Filtrá por fecha desde y hasta para armar la liquidación.",
+    icon: <CreditCard className="h-4 w-4" />,
+    position: "right",
   },
   {
     id: "agenda",
@@ -83,6 +103,15 @@ const TOUR_STEPS: TourStep[] = [
     description:
       "La vista rápida de hoy te muestra los turnos del día en formato lista, ideal para cuando estás atendiendo.",
     icon: <Clock className="h-4 w-4" />,
+    position: "right",
+  },
+  {
+    id: "videoconsultas",
+    targetSelector: '[data-tour="nav-hoy"]',
+    title: "Videoconsultas automáticas ✨",
+    description:
+      "Para las reservas virtuales, BookMe genera un link gratis (Jitsi) al guardar el turno. El paciente lo recibe por email al confirmar, 24hs antes y 5 min antes. Vos entrás con el botón azul 'Entrar a la videoconsulta' en Hoy y en la agenda semanal. 30 min antes la tarjeta se marca con ring azul 'Próximo'. Los turnos reservados online desde bookme.ar/@tunombre quedan automáticamente confirmados.",
+    icon: <Video className="h-4 w-4" />,
     position: "right",
   },
   {
@@ -173,9 +202,10 @@ function getTooltipStyle(
       break;
   }
 
-  // Clamp dentro del viewport
+  // Clamp dentro del viewport. El 380 asume tooltip ~300-360px alto
+  // (header + contenido con scroll hasta 50vh + progress + botones).
   left = Math.max(16, Math.min(left, viewportW - tooltipWidth - 16));
-  top = Math.max(16, Math.min(top, viewportH - 250));
+  top = Math.max(16, Math.min(top, viewportH - 380));
 
   return {
     position: "fixed",
@@ -197,8 +227,19 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  const step = TOUR_STEPS[currentStep];
-  const totalSteps = TOUR_STEPS.length;
+  // Filtrar pasos cuyo target no existe en el DOM (ej: items healthcare-only para Business)
+  const [steps] = useState<TourStep[]>(() =>
+    TOUR_STEPS.filter((s) => {
+      // MIA se renderiza con delay — siempre mantenerlo
+      if (s.id === "mia") return true;
+      return typeof document !== "undefined"
+        ? document.querySelector(s.targetSelector) !== null
+        : true;
+    })
+  );
+
+  const step = steps[currentStep];
+  const totalSteps = steps.length;
 
   // Encontrar y posicionar el highlight sobre el target
   const updateTarget = useCallback(() => {
@@ -381,8 +422,8 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
             </button>
           </div>
 
-          {/* Contenido */}
-          <div className="px-4 py-3 space-y-2">
+          {/* Contenido — scrolleable si la descripción es larga, así los botones siempre quedan visibles */}
+          <div className="px-4 py-3 space-y-2 max-h-[50vh] overflow-y-auto">
             <div className="flex items-center gap-2">
               <div
                 className={cn(
@@ -412,7 +453,7 @@ export function OnboardingTour({ onComplete }: OnboardingTourProps) {
           <div className="px-4 pb-3 space-y-3">
             {/* Mini progress */}
             <div className="flex gap-1">
-              {TOUR_STEPS.map((_, i) => (
+              {steps.map((_, i) => (
                 <div
                   key={i}
                   className={cn(

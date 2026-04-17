@@ -4,6 +4,27 @@ import { decryptClinicalRecord } from "@/lib/crypto/clinical-record";
 import PDFDocument from "pdfkit";
 
 /**
+ * Parsea el contenido desencriptado de un registro clínico.
+ * Los registros nuevos se guardan como JSON { content, diagnosis, notes }.
+ * Los registros viejos son texto plano (backward compatible).
+ */
+function parseRecordContent(decrypted: string): { content: string; diagnosis: string | null; notes: string | null } {
+  try {
+    const parsed = JSON.parse(decrypted) as { content?: string; diagnosis?: string; notes?: string };
+    if (parsed && typeof parsed.content === "string") {
+      return {
+        content: parsed.content,
+        diagnosis: parsed.diagnosis || null,
+        notes: parsed.notes || null,
+      };
+    }
+  } catch {
+    // No es JSON — registro viejo con texto plano
+  }
+  return { content: decrypted, diagnosis: null, notes: null };
+}
+
+/**
  * GET /api/clinical-records/export
  * Genera un PDF con la historia clínica de un paciente.
  *
@@ -109,31 +130,57 @@ export async function GET(request: NextRequest) {
       : "Profesional";
 
     // Obtener registros clínicos encriptados (excluir archivados en historial completo)
-    let query = admin
-      .from("clinical_records")
-      .select("id, content_encrypted, iv, appointment_id, is_amendment, amends_record_id, created_at, updated_at")
-      .eq("professional_id", professionalId)
-      .eq("patient_id", patientId)
-      .eq("is_archived", false)
-      .order("created_at", { ascending: true });
+    // Intentar query con columnas de inmutabilidad; si falla, usar query básica
+    let encryptedRecords: Array<{
+      id: string;
+      content_encrypted: string;
+      iv: string;
+      appointment_id: string | null;
+      is_amendment?: boolean;
+      amends_record_id?: string | null;
+      is_archived?: boolean;
+      created_at: string;
+      updated_at: string;
+    }> | null = null;
+    let fetchError: { message: string } | null = null;
 
-    if (recordId) {
-      query = query.eq("id", recordId);
+    {
+      let query = admin
+        .from("clinical_records")
+        .select("id, content_encrypted, iv, appointment_id, is_amendment, amends_record_id, is_archived, created_at, updated_at")
+        .eq("professional_id", professionalId)
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: true });
+
+      if (recordId) {
+        query = query.eq("id", recordId);
+      }
+
+      const result1 = await query;
+
+      if (result1.error) {
+        // Columnas de migración no existen — query básica
+        console.log("[EXPORT] Full query failed:", result1.error.message, "— trying basic query");
+        let basicQuery = admin
+          .from("clinical_records")
+          .select("id, content_encrypted, iv, appointment_id, created_at, updated_at")
+          .eq("professional_id", professionalId)
+          .eq("patient_id", patientId)
+          .order("created_at", { ascending: true });
+
+        if (recordId) {
+          basicQuery = basicQuery.eq("id", recordId);
+        }
+
+        const result2 = await basicQuery;
+        encryptedRecords = result2.data;
+        fetchError = result2.error;
+      } else {
+        // Filtrar archivados
+        encryptedRecords = (result1.data || []).filter((r: Record<string, unknown>) => r.is_archived !== true) as typeof encryptedRecords;
+        fetchError = null;
+      }
     }
-
-    const { data: encryptedRecords, error: fetchError } = await query as Promise<{
-      data: Array<{
-        id: string;
-        content_encrypted: string;
-        iv: string;
-        appointment_id: string | null;
-        is_amendment: boolean;
-        amends_record_id: string | null;
-        created_at: string;
-        updated_at: string;
-      }> | null;
-      error: any;
-    }>;
 
     if (fetchError) {
       console.error("Error fetching clinical records for export:", fetchError.message);
@@ -147,14 +194,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Desencriptar todos los registros
+    // Desencriptar todos los registros y parsear campos estructurados
     const records = await Promise.all(
       encryptedRecords.map(async (record) => {
         try {
-          const content = await decryptClinicalRecord(record.content_encrypted, record.iv);
+          const decrypted = await decryptClinicalRecord(record.content_encrypted, record.iv);
+          const { content, diagnosis, notes } = parseRecordContent(decrypted);
           return {
             id: record.id,
             content,
+            diagnosis,
+            notes,
             appointment_id: record.appointment_id,
             created_at: record.created_at,
             updated_at: record.updated_at,
@@ -163,6 +213,8 @@ export async function GET(request: NextRequest) {
           return {
             id: record.id,
             content: "[Error al desencriptar este registro]",
+            diagnosis: null,
+            notes: null,
             appointment_id: record.appointment_id,
             created_at: record.created_at,
             updated_at: record.updated_at,
@@ -178,17 +230,17 @@ export async function GET(request: NextRequest) {
       "0.0.0.0";
 
     for (const record of records) {
-      await admin
+      const { error: auditErr } = await admin
         .from("clinical_record_audit")
         .insert({
           record_id: record.id,
           accessed_by: user.id,
           action: "export",
           ip_address: ipAddress,
-        })
-        .catch((err) => {
-          console.error(`Error auditoría export para ${record.id}:`, err);
         });
+      if (auditErr) {
+        console.error(`Error auditoría export para ${record.id}:`, auditErr.message);
+      }
     }
 
     // Generar PDF
@@ -220,7 +272,16 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error GET /api/clinical-records/export:", error);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    return NextResponse.json(
+      {
+        error: "Error interno",
+        detail: process.env.NODE_ENV === "development" ? message : undefined,
+        stack: process.env.NODE_ENV === "development" ? stack : undefined,
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -229,6 +290,8 @@ export async function GET(request: NextRequest) {
 interface PDFRecord {
   id: string;
   content: string;
+  diagnosis: string | null;
+  notes: string | null;
   appointment_id: string | null;
   created_at: string;
   updated_at: string;
@@ -453,28 +516,66 @@ async function generatePDF(data: PDFData): Promise<Buffer> {
 
       y += 18;
 
-      // Contenido del registro
+      // Contenido del registro — Evolución
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .fillColor("#6b7280")
+        .text("Evolución:", 60, y);
+      y = doc.y + 4;
+
       doc.font("Helvetica").fontSize(9).fillColor("#1f2937");
-
-      // Calcular alto del texto para saber si necesitamos nueva página
-      const textHeight = doc.heightOfString(record.content, {
+      doc.text(record.content, 60, y, {
         width: pageWidth - 20,
+        lineGap: 3,
       });
+      y = doc.y + 10;
 
-      if (y + textHeight > doc.page.height - 80) {
-        // Si el texto es muy largo, hacemos wrap con paginación
-        doc.text(record.content, 60, y, {
+      // Diagnóstico (si existe)
+      if (record.diagnosis) {
+        if (y > doc.page.height - 100) {
+          doc.addPage();
+          y = 50;
+        }
+
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(8)
+          .fillColor("#2563eb")
+          .text("Diagnóstico:", 60, y);
+        y = doc.y + 4;
+
+        doc.font("Helvetica").fontSize(9).fillColor("#1e40af");
+        doc.text(record.diagnosis, 60, y, {
           width: pageWidth - 20,
           lineGap: 3,
         });
-        y = doc.y + 15;
-      } else {
-        doc.text(record.content, 60, y, {
-          width: pageWidth - 20,
-          lineGap: 3,
-        });
-        y = doc.y + 15;
+        y = doc.y + 10;
       }
+
+      // Notas del profesional (si existen)
+      if (record.notes) {
+        if (y > doc.page.height - 100) {
+          doc.addPage();
+          y = 50;
+        }
+
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(8)
+          .fillColor("#d97706")
+          .text("Notas del profesional:", 60, y);
+        y = doc.y + 4;
+
+        doc.font("Helvetica").fontSize(9).fillColor("#92400e");
+        doc.text(record.notes, 60, y, {
+          width: pageWidth - 20,
+          lineGap: 3,
+        });
+        y = doc.y + 10;
+      }
+
+      y += 5;
 
       // Separador entre registros
       if (i < data.records.length - 1) {

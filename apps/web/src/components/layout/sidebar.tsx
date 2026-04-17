@@ -24,6 +24,7 @@ import {
   Shield,
   TrendingUp,
   CalendarCheck,
+  UserCircle,
   Home,
   Building2,
   Upload,
@@ -32,6 +33,7 @@ import {
   QrCode,
   Dribbble,
   BookOpen,
+  Compass,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -39,6 +41,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo, memo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSession } from "@/hooks/use-session";
+import { Avatar } from "@/components/ui/avatar";
 
 interface NavItem {
   label: string;
@@ -74,6 +77,7 @@ const NAV_PROFESSIONAL_FOOTER: NavItem[] = [
 const NAV_PATIENT: NavItem[] = [
   { label: "Mis turnos", href: "/mis-turnos", icon: CalendarCheck },
   { label: "Directorio", href: "/directorio", icon: Users },
+  { label: "Mi perfil", href: "/mis-turnos/mi-perfil", icon: UserCircle },
 ];
 
 // Admin de consultorio
@@ -235,22 +239,30 @@ export const Sidebar = memo(function Sidebar() {
 
         {/* Info del usuario */}
         {user && !loading && (
-          <div className="border-b px-4 py-3">
-            <p className="text-sm font-medium text-foreground truncate">
-              {user.full_name}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {roleLabel}
-              {user.professional?.line === "healthcare" && (
-                <span className="ml-1 text-blue-500">• Salud</span>
-              )}
-              {user.professional?.line === "business" && (
-                <span className="ml-1 text-emerald-500">• Negocios</span>
-              )}
-              {user.role === "canchas" && (
-                <span className="ml-1 text-orange-500">• Canchas</span>
-              )}
-            </p>
+          <div className="border-b px-4 py-3 flex items-center gap-3">
+            <Avatar
+              src={user.avatar_url}
+              alt={user.full_name}
+              fallback={user.full_name}
+              size="md"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground truncate">
+                {user.full_name}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {roleLabel}
+                {user.professional?.line === "healthcare" && (
+                  <span className="ml-1 text-blue-500">• Salud</span>
+                )}
+                {user.professional?.line === "business" && (
+                  <span className="ml-1 text-emerald-500">• Negocios</span>
+                )}
+                {user.role === "canchas" && (
+                  <span className="ml-1 text-orange-500">• Canchas</span>
+                )}
+              </p>
+            </div>
           </div>
         )}
 
@@ -295,6 +307,18 @@ export const Sidebar = memo(function Sidebar() {
 
         {/* Footer: ayuda + dark mode toggle + logout */}
         <div className="border-t px-3 py-4 space-y-1">
+          {user?.role === "professional" && (
+            <button
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              onClick={() => {
+                setMobileOpen(false);
+                window.dispatchEvent(new Event("bookme:restart-tour"));
+              }}
+            >
+              <Compass className="h-4 w-4" />
+              Ver tour de bienvenida
+            </button>
+          )}
           <Link
             href="/soporte"
             target="_blank"

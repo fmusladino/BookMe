@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("appointments")
       .select(
-        `id, professional_id, patient_id, service_id, starts_at, ends_at, status, notes, reminder_sent, created_at, updated_at, cancelled_at, cancellation_reason, booked_by,
+        `id, professional_id, patient_id, service_id, starts_at, ends_at, status, notes, reminder_sent, created_at, updated_at, cancelled_at, cancellation_reason, booked_by, modality, meet_url,
         patient:patients(id, full_name, phone, email),
         service:services(id, name, duration_minutes, price)`
       )
@@ -99,14 +99,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { patient_id, service_id, prestacion_id, starts_at, ends_at, notes } = parsed.data;
+    const { patient_id, service_id, prestacion_id, starts_at, ends_at, notes, modality, meet_url } = parsed.data;
 
     // Validar reglas de negocio de la agenda
     const validationResult = await validateAppointmentSlot(
       supabase,
       user.id,
       starts_at,
-      ends_at
+      ends_at,
+      modality
     );
 
     if (!validationResult.valid) {
@@ -143,6 +144,8 @@ export async function POST(request: NextRequest) {
       notes,
       booked_by: user.id,
       status: "confirmed" as AppointmentStatus,
+      modality,
+      meet_url: meet_url ?? null,
     };
     if (prestacion_id) {
       insertData.prestacion_id = prestacion_id;

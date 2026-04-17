@@ -31,7 +31,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
     <div
       ref={ref}
       className={cn(
-        "w-full rounded-lg border bg-background p-6 shadow-lg animate-in fade-in-0 zoom-in-95 max-h-[85vh] overflow-y-auto",
+        "w-full rounded-lg border bg-background p-6 shadow-lg animate-in fade-in-0 zoom-in-95 max-h-[95vh] overflow-y-auto",
         !className?.includes("max-w-") && "max-w-lg",
         className
       )}

@@ -1,15 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { verifyCronAuth } from "@/lib/security";
 
 /**
  * GET /api/cron/gcal-refresh
  * Cron job diario: renueva webhooks y hace sync incremental de seguridad.
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env["CRON_SECRET"]}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const authError = verifyCronAuth(request);
+  if (authError) return authError;
 
   const client = await import("@/lib/google-calendar/client").catch(() => null);
   const syncMod = await import("@/lib/google-calendar/sync").catch(() => null);

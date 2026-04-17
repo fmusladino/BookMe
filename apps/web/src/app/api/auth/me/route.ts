@@ -32,7 +32,7 @@ export async function GET() {
         .single(),
       supabase
         .from("professionals")
-        .select("line, specialty, subscription_plan, subscription_status, trial_ends_at, public_slug")
+        .select("line, specialty, subscription_plan, subscription_status, trial_ends_at, subscription_expires_at, cancelled_at, cancellation_reason, public_slug")
         .eq("id", user.id)
         .maybeSingle(),
       // Datos de dueño de canchas
@@ -82,6 +82,9 @@ export async function GET() {
         status: subscriptionSource.subscription_status || "trialing",
         trialEndsAt: subscriptionSource.trial_ends_at,
         daysUntilTrialEnd,
+        subscriptionExpiresAt: (subscriptionSource as { subscription_expires_at?: string | null }).subscription_expires_at ?? null,
+        cancelledAt: (subscriptionSource as { cancelled_at?: string | null }).cancelled_at ?? null,
+        cancellationReason: (subscriptionSource as { cancellation_reason?: string | null }).cancellation_reason ?? null,
       };
     }
 

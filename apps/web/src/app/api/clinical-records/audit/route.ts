@@ -70,7 +70,11 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1);
 
     if (auditError) {
+      // Si la tabla no existe aún, devolver vacío en vez de error
       console.error("Error fetching audit logs:", auditError.message);
+      if (auditError.message.includes("does not exist") || auditError.message.includes("relation")) {
+        return NextResponse.json({ audit_logs: [], total: 0 });
+      }
       return NextResponse.json({ error: "Error al obtener logs de auditoría" }, { status: 500 });
     }
 

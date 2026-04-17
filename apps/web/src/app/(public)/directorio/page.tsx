@@ -1,15 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, MapPin, ChevronLeft, ChevronRight, Loader2, Stethoscope, Briefcase, Building2, Shield } from 'lucide-react';
+import { Search, MapPin, ChevronLeft, ChevronRight, Loader2, Stethoscope, Briefcase, Building2, Shield, Filter, X, ChevronDown } from 'lucide-react';
 
 const COUNTRY_NAMES: Record<string, string> = {
   AR: 'Argentina', UY: 'Uruguay', CL: 'Chile', CO: 'Colombia',
   MX: 'México', PE: 'Perú', BR: 'Brasil', PY: 'Paraguay',
   BO: 'Bolivia', EC: 'Ecuador',
 };
+
+interface Insurance {
+  id: string;
+  name: string;
+}
 
 interface Professional {
   id: string;
@@ -47,8 +52,60 @@ export default function DirectoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [city, setCity] = useState('');
   const [line, setLine] = useState<'all' | 'healthcare' | 'business'>('all');
+  const [selectedCity, setSelectedCity] = useState('');
+  const [selectedInsurance, setSelectedInsurance] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Opciones de filtros dinámicas
+  const [insurances, setInsurances] = useState<Insurance[]>([]);
+  const [availableCities, setAvailableCities] = useState<string[]>([]);
+  const [insuranceSearch, setInsuranceSearch] = useState('');
+  const [citySearch, setCitySearch] = useState('');
+  const [showInsuranceDropdown, setShowInsuranceDropdown] = useState(false);
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+
+  const insuranceDropdownRef = useRef<HTMLDivElement>(null);
+  const cityDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar dropdowns al hacer click afuera
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (insuranceDropdownRef.current && !insuranceDropdownRef.current.contains(e.target as Node)) {
+        setShowInsuranceDropdown(false);
+      }
+      if (cityDropdownRef.current && !cityDropdownRef.current.contains(e.target as Node)) {
+        setShowCityDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Cargar filtros dinámicos (obras sociales con prestadores + localidades)
+  // Se recarga cada vez que cambia la línea (Salud/Negocios) para mantener datos frescos
+  const [filtersLoading, setFiltersLoading] = useState(false);
+  useEffect(() => {
+    setFiltersLoading(true);
+    fetch('/api/directory/filters?t=' + Date.now())
+      .then((res) => {
+        console.log('[Directorio] Filters status:', res.status);
+        if (!res.ok) {
+          console.error('[Directorio] Filters response not OK:', res.status, res.statusText);
+          return res.text().then((t) => { console.error('[Directorio] Body:', t); return { insurances: [], cities: [] }; });
+        }
+        return res.json();
+      })
+      .then((data: { insurances?: Insurance[]; cities?: string[] }) => {
+        console.log('[Directorio] Filters loaded — insurances:', data.insurances?.length, 'cities:', data.cities?.length);
+        setInsurances(data.insurances || []);
+        setAvailableCities(data.cities || []);
+      })
+      .catch((err) => {
+        console.error('[Directorio] Error loading filters:', err);
+      })
+      .finally(() => setFiltersLoading(false));
+  }, [line]);
 
   useEffect(() => {
     const fetchProfessionals = async () => {
@@ -58,8 +115,11 @@ export default function DirectoryPage() {
       try {
         const params = new URLSearchParams();
         if (searchQuery) params.append('search', searchQuery);
-        if (city) params.append('city', city);
+        // selectedCity (dropdown) tiene prioridad sobre city (texto libre del hero)
+        const effectiveCity = selectedCity || city;
+        if (effectiveCity) params.append('city', effectiveCity);
         if (line !== 'all') params.append('line', line);
+        if (selectedInsurance) params.append('insurance', selectedInsurance);
         params.append('page', page.toString());
         params.append('limit', '12');
 
@@ -83,10 +143,32 @@ export default function DirectoryPage() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, city, line, page]);
+  }, [searchQuery, city, line, selectedCity, selectedInsurance, page]);
 
   const handleLineChange = (newLine: 'all' | 'healthcare' | 'business') => {
     setLine(newLine);
+    setPage(1);
+    if (newLine !== 'healthcare') {
+      setSelectedInsurance('');
+      setInsuranceSearch('');
+    }
+  };
+
+  const selectedInsuranceName = insurances.find((i) => i.id === selectedInsurance)?.name || '';
+  const filteredInsurances = insuranceSearch
+    ? insurances.filter((i) => i.name.toLowerCase().includes(insuranceSearch.toLowerCase()))
+    : insurances;
+  const filteredCities = citySearch
+    ? availableCities.filter((c) => c.toLowerCase().includes(citySearch.toLowerCase()))
+    : availableCities;
+
+  const hasActiveFilters = selectedCity !== '' || selectedInsurance !== '';
+
+  const clearAllFilters = () => {
+    setSelectedCity('');
+    setCitySearch('');
+    setSelectedInsurance('');
+    setInsuranceSearch('');
     setPage(1);
   };
 
@@ -163,6 +245,176 @@ export default function DirectoryPage() {
           )}
         </div>
       </div>
+
+      {/* Filtros avanzados — visible cuando se elige un plan (Salud o Negocios) */}
+      {line !== 'all' && (
+        <div className="border-b border-border bg-card/50">
+          <div className="max-w-5xl mx-auto px-4 py-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Filtrar por</span>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="ml-auto flex items-center gap-1 text-xs text-destructive hover:underline"
+                >
+                  <X className="w-3 h-3" />
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Filtro por obra social / prepaga (primero) */}
+              {line === 'healthcare' && (
+                <div ref={insuranceDropdownRef} className="relative sm:w-64">
+                  <div
+                    onClick={() => setShowInsuranceDropdown(!showInsuranceDropdown)}
+                    className="flex items-center justify-between w-full rounded-lg border border-border bg-background px-3 py-2 text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <span className={selectedInsuranceName ? 'text-foreground' : 'text-muted-foreground'}>
+                      {selectedInsuranceName || 'Obra social / Prepaga'}
+                    </span>
+                    {selectedInsurance ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedInsurance(''); setInsuranceSearch(''); setPage(1); }}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                  </div>
+
+                  {showInsuranceDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-border bg-card shadow-lg max-h-60 overflow-hidden">
+                      {/* Buscador dentro del dropdown */}
+                      <div className="p-2 border-b border-border">
+                        <input
+                          type="text"
+                          placeholder="Buscar obra social..."
+                          value={insuranceSearch}
+                          onChange={(e) => setInsuranceSearch(e.target.value)}
+                          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                          autoFocus
+                        />
+                      </div>
+                      <div className="overflow-y-auto max-h-48">
+                        {filtersLoading ? (
+                          <p className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Cargando obras sociales...</p>
+                        ) : filteredInsurances.length === 0 ? (
+                          <p className="px-3 py-2 text-xs text-muted-foreground">No se encontraron resultados ({insurances.length} total)</p>
+                        ) : (
+                          filteredInsurances.map((ins) => (
+                            <button
+                              key={ins.id}
+                              onClick={() => {
+                                setSelectedInsurance(ins.id);
+                                setInsuranceSearch('');
+                                setShowInsuranceDropdown(false);
+                                setPage(1);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${
+                                selectedInsurance === ins.id ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                              }`}
+                            >
+                              {ins.name}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Filtro por localidad (segundo) */}
+              <div ref={cityDropdownRef} className="relative sm:w-56">
+                <div
+                  onClick={() => setShowCityDropdown(!showCityDropdown)}
+                  className="flex items-center justify-between w-full rounded-lg border border-border bg-background px-3 py-2 text-sm cursor-pointer"
+                >
+                  <span className={selectedCity ? 'text-foreground' : 'text-muted-foreground'}>
+                    {selectedCity || 'Localidad'}
+                  </span>
+                  {selectedCity ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSelectedCity(''); setCitySearch(''); setPage(1); }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                </div>
+
+                {showCityDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-border bg-card shadow-lg max-h-60 overflow-hidden">
+                    <div className="p-2 border-b border-border">
+                      <input
+                        type="text"
+                        placeholder="Buscar localidad..."
+                        value={citySearch}
+                        onChange={(e) => setCitySearch(e.target.value)}
+                        className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="overflow-y-auto max-h-48">
+                      {filtersLoading ? (
+                        <p className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Cargando localidades...</p>
+                      ) : filteredCities.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-muted-foreground">No se encontraron localidades ({availableCities.length} total)</p>
+                      ) : (
+                        filteredCities.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => {
+                              setSelectedCity(c);
+                              setCitySearch('');
+                              setShowCityDropdown(false);
+                              setPage(1);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${
+                              selectedCity === c ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                            }`}
+                          >
+                            {c}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tags de filtros activos */}
+            {hasActiveFilters && (
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {selectedCity && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    {selectedCity}
+                    <button onClick={() => { setSelectedCity(''); setCitySearch(''); setPage(1); }}>
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+                {selectedInsuranceName && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    {selectedInsuranceName}
+                    <button onClick={() => { setSelectedInsurance(''); setInsuranceSearch(''); setPage(1); }}>
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Resultados */}
       <section className="max-w-5xl mx-auto px-4 py-8">

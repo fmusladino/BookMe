@@ -11,16 +11,37 @@ const createClinicalRecordSchema = z.object({
   patient_id: z.string().uuid("ID de paciente inválido"),
   appointment_id: z.string().uuid("ID de turno inválido").optional(),
   content: z.string().min(1, "El contenido no puede estar vacío"),
+  diagnosis: z.string().optional(),
+  notes: z.string().optional(),
 });
+
+/**
+ * Parsea el contenido desencriptado de un registro clínico.
+ * Los registros nuevos se guardan como JSON { content, diagnosis, notes }.
+ * Los registros viejos son texto plano (backward compatible).
+ */
+function parseRecordContent(decrypted: string): { content: string; diagnosis: string | null; notes: string | null } {
+  try {
+    const parsed = JSON.parse(decrypted) as { content?: string; diagnosis?: string; notes?: string };
+    if (parsed && typeof parsed.content === "string") {
+      return {
+        content: parsed.content,
+        diagnosis: parsed.diagnosis || null,
+        notes: parsed.notes || null,
+      };
+    }
+  } catch {
+    // No es JSON — registro viejo con texto plano
+  }
+  return { content: decrypted, diagnosis: null, notes: null };
+}
 
 // GET /api/clinical-records — Obtener historias clínicas de un paciente
 // Query params: patient_id (requerido)
 export async function GET(request: NextRequest) {
   try {
-    console.log("[CLINICAL-RECORDS GET] Starting...");
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log("[CLINICAL-RECORDS GET] Auth:", user?.id ?? "NO USER", authError?.message ?? "OK");
 
     if (authError || !user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -28,8 +49,6 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get("patient_id");
-    console.log("[CLINICAL-RECORDS GET] patientId:", patientId);
-
     if (!patientId) {
       return NextResponse.json(
         { error: "patient_id es requerido" },
@@ -48,8 +67,6 @@ export async function GET(request: NextRequest) {
       .eq("professional_id", user.id)
       .eq("patient_id", patientId)
       .limit(1);
-
-    console.log("[CLINICAL-RECORDS GET] Access check:", patientAccess?.length ?? "NULL", accessError?.message ?? "OK");
 
     if (accessError || !patientAccess || patientAccess.length === 0) {
       return NextResponse.json(
@@ -107,20 +124,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Desencriptar contenido de cada historia
+    // Desencriptar contenido de cada historia y parsear campos estructurados
     const records = await Promise.all(
       (encryptedRecords || []).map(async (record) => {
         try {
-          const content = await decryptClinicalRecord(
+          const decrypted = await decryptClinicalRecord(
             record.content_encrypted as string,
             record.iv as string
           );
+          const { content, diagnosis, notes } = parseRecordContent(decrypted);
           return {
             id: record.id,
             professional_id: record.professional_id,
             patient_id: record.patient_id,
             appointment_id: record.appointment_id,
             content,
+            diagnosis,
+            notes,
             is_amendment: record.is_amendment ?? false,
             amends_record_id: record.amends_record_id ?? null,
             is_archived: record.is_archived ?? false,
@@ -135,6 +155,8 @@ export async function GET(request: NextRequest) {
             patient_id: record.patient_id,
             appointment_id: record.appointment_id,
             content: null,
+            diagnosis: null,
+            notes: null,
             is_amendment: record.is_amendment ?? false,
             amends_record_id: record.amends_record_id ?? null,
             is_archived: record.is_archived ?? false,
@@ -194,7 +216,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { patient_id, appointment_id, content } = parsed.data;
+    const { patient_id, appointment_id, content, diagnosis, notes } = parsed.data;
+
+    // Construir el contenido estructurado como JSON para encriptar
+    const structuredContent = JSON.stringify({
+      content,
+      diagnosis: diagnosis || null,
+      notes: notes || null,
+    });
 
     // Usar adminClient para queries (RLS causa 500 en algunos flujos)
     // Seguridad: siempre filtramos por professional_id = user.id
@@ -236,8 +265,8 @@ export async function POST(request: NextRequest) {
     // Encriptar el contenido
     let encryptedData;
     try {
-      console.log("[CLINICAL-RECORDS POST] Encrypting content, length:", content.length);
-      encryptedData = await encryptClinicalRecord(content);
+      console.log("[CLINICAL-RECORDS POST] Encrypting content, length:", structuredContent.length);
+      encryptedData = await encryptClinicalRecord(structuredContent);
       console.log("[CLINICAL-RECORDS POST] Encryption OK, encrypted length:", encryptedData.contentEncrypted.length);
     } catch (encryptError) {
       console.error("Error encriptando historia clínica:", encryptError);
@@ -287,11 +316,78 @@ export async function POST(request: NextRequest) {
       console.error("Error registrando auditoría CREATE:", err);
     }
 
+    // === AUTO-BILLING: Generar ítem de facturación si el paciente tiene prepaga ===
+    try {
+      const { data: patient } = await adminClient
+        .from("patients")
+        .select("id, insurance_id, insurance_number, is_particular")
+        .eq("id", patient_id)
+        .single();
+
+      if (patient && patient.insurance_id && !patient.is_particular) {
+        // Buscar si ya existe billing_item para este turno (evitar duplicados)
+        const appointmentForBilling = appointment_id || null;
+        let alreadyBilled = false;
+
+        if (appointmentForBilling) {
+          const { data: existingBilling } = await adminClient
+            .from("billing_items")
+            .select("id")
+            .eq("appointment_id", appointmentForBilling)
+            .limit(1);
+          alreadyBilled = (existingBilling && existingBilling.length > 0) || false;
+        }
+
+        if (!alreadyBilled) {
+          // Buscar prestación activa para esta prepaga
+          const { data: prestacion } = await adminClient
+            .from("prestaciones")
+            .select("id, code, description, amount")
+            .eq("professional_id", user.id)
+            .eq("insurance_id", patient.insurance_id)
+            .eq("is_active", true)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (prestacion) {
+            const now = new Date();
+            const { error: billingErr } = await adminClient
+              .from("billing_items")
+              .insert({
+                professional_id: user.id,
+                patient_id,
+                appointment_id: appointmentForBilling,
+                insurance_id: patient.insurance_id,
+                practice_code: prestacion.code || "CONS",
+                practice_name: prestacion.description || "Consulta",
+                amount: prestacion.amount || 0,
+                status: "pending",
+                period_month: now.getMonth() + 1,
+                period_year: now.getFullYear(),
+              });
+
+            if (billingErr) {
+              console.error("[AUTO-BILLING] Error creando billing_item:", billingErr.message);
+            } else {
+              if (process.env.NODE_ENV !== "production") console.log("[AUTO-BILLING] Billing item creado");
+            }
+          } else {
+            if (process.env.NODE_ENV !== "production") console.log("[AUTO-BILLING] No se encontró prestación activa");
+          }
+        }
+      }
+    } catch (billingError) {
+      // No bloquear la creación de HC si falla el billing
+      console.error("[AUTO-BILLING] Error en auto-billing:", billingError);
+    }
+
     // Desencriptar para devolver en respuesta
-    const decryptedContent = await decryptClinicalRecord(
+    const decrypted = await decryptClinicalRecord(
       record.content_encrypted as string,
       record.iv as string
     );
+    const parsedFields = parseRecordContent(decrypted);
 
     return NextResponse.json(
       {
@@ -300,7 +396,9 @@ export async function POST(request: NextRequest) {
           professional_id: record.professional_id,
           patient_id: record.patient_id,
           appointment_id: record.appointment_id,
-          content: decryptedContent,
+          content: parsedFields.content,
+          diagnosis: parsedFields.diagnosis,
+          notes: parsedFields.notes,
           created_at: record.created_at,
           updated_at: record.updated_at,
         },

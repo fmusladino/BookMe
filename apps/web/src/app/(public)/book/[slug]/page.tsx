@@ -4,11 +4,24 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, startOfDay, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar, Clock, Check, ChevronLeft, ChevronRight, ArrowLeft, User, Loader2 } from 'lucide-react';
+import { Calendar, Clock, Check, ChevronLeft, ChevronRight, ArrowLeft, User, Loader2, MapPin, Video } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast as sonnerToast } from 'sonner';
 import Link from 'next/link';
+
+interface WorkingHourRange {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+}
+
+interface ScheduleConfig {
+  working_days: number[];
+  vacation_mode: boolean;
+  vacation_from: string | null;
+  vacation_until: string | null;
+}
 
 interface Professional {
   id: string;
@@ -20,6 +33,8 @@ interface Professional {
     avatar_url: string | null;
   };
   services: Service[];
+  scheduleConfig: ScheduleConfig | null;
+  workingHours: WorkingHourRange[];
 }
 
 interface Service {
@@ -28,11 +43,15 @@ interface Service {
   duration_minutes: number;
   price: number | null;
   show_price: boolean;
+  modality?: 'presencial' | 'virtual' | 'both';
 }
+
+type Modality = 'presencial' | 'virtual';
 
 interface AvailableSlot {
   start: string; // ISO datetime
   end: string;   // ISO datetime
+  modality?: 'presencial' | 'virtual' | 'both';
 }
 
 type BookingStep = 'service' | 'date' | 'time' | 'confirm';
@@ -52,6 +71,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [selectedModality, setSelectedModality] = useState<Modality>('presencial');
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -178,6 +198,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
           starts_at: startsAtISO,
           ends_at: endsAtISO,
           notes: '',
+          modality: selectedModality,
         }),
       });
 
@@ -242,6 +263,9 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
               key={service.id}
               onClick={() => {
                 setSelectedService(service);
+                // Si el servicio fuerza una modalidad, la usamos; si es "both", arrancamos en presencial
+                if (service.modality === 'virtual') setSelectedModality('virtual');
+                else setSelectedModality('presencial');
                 setStep('date');
               }}
               className={`p-4 rounded-lg border-2 transition-all text-left ${
@@ -270,6 +294,39 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
     </div>
   );
 
+  // Días que efectivamente tienen horarios configurados (fuente de verdad: working_hours)
+  const actualWorkingDays = professional?.workingHours
+    ? [...new Set(professional.workingHours.map((wh) => wh.day_of_week))].sort((a, b) => a - b)
+    : professional?.scheduleConfig?.working_days ?? [];
+
+  // Determina si un día está deshabilitado según la config del profesional
+  const isDayDisabled = (day: Date): boolean => {
+    const today = startOfDay(new Date());
+    if (isBefore(day, today)) return true;
+
+    // Verificar día laboral usando los días con horarios reales
+    const dayOfWeek = getDay(day);
+    if (actualWorkingDays.length > 0 && !actualWorkingDays.includes(dayOfWeek)) return true;
+
+    // Verificar vacaciones
+    const config = professional?.scheduleConfig;
+    if (config?.vacation_mode) {
+      const vacFrom = config.vacation_from ? startOfDay(new Date(config.vacation_from)) : null;
+      const vacUntil = config.vacation_until ? startOfDay(new Date(config.vacation_until)) : null;
+      const dayStart = startOfDay(day);
+
+      const isInVacation =
+        (!vacFrom && !vacUntil) ||
+        (!vacFrom && vacUntil && dayStart <= vacUntil) ||
+        (vacFrom && !vacUntil && dayStart >= vacFrom) ||
+        (vacFrom && vacUntil && dayStart >= vacFrom && dayStart <= vacUntil);
+
+      if (isInVacation) return true;
+    }
+
+    return false;
+  };
+
   const renderDateStep = () => {
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
@@ -279,9 +336,29 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
 
     const today = startOfDay(new Date());
 
+    // Obtener los nombres de días laborales para mostrar al paciente
+    const config = professional?.scheduleConfig;
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const workingDayNames = actualWorkingDays.length > 0
+      ? actualWorkingDays.map((d) => dayNames[d]).join(', ')
+      : null;
+
     return (
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold mb-6">Seleccioná una fecha</h2>
+        <h2 className="text-2xl font-bold mb-2">Seleccioná una fecha</h2>
+        {workingDayNames && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Días de atención: {workingDayNames}
+          </p>
+        )}
+        {config?.vacation_mode && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg px-4 py-2 text-sm text-yellow-800 dark:text-yellow-200 mb-4">
+            El profesional se encuentra de vacaciones
+            {config.vacation_from && config.vacation_until
+              ? ` del ${format(new Date(config.vacation_from), "d 'de' MMMM", { locale: es })} al ${format(new Date(config.vacation_until), "d 'de' MMMM", { locale: es })}`
+              : ''}
+          </div>
+        )}
 
         {/* Calendar Header */}
         <div className="flex items-center justify-between mb-4">
@@ -304,14 +381,21 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
 
         {/* Day names */}
         <div className="grid grid-cols-7 gap-2 mb-2">
-          {['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa'].map((day) => (
-            <div
-              key={day}
-              className="text-center font-semibold text-sm text-gray-600 dark:text-gray-400"
-            >
-              {day}
-            </div>
-          ))}
+          {['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa'].map((day, idx) => {
+            const isWorkingDay = actualWorkingDays.length > 0 ? actualWorkingDays.includes(idx) : true;
+            return (
+              <div
+                key={day}
+                className={`text-center font-semibold text-sm ${
+                  isWorkingDay
+                    ? 'text-gray-600 dark:text-gray-400'
+                    : 'text-gray-300 dark:text-gray-600'
+                }`}
+              >
+                {day}
+              </div>
+            );
+          })}
         </div>
 
         {/* Calendar days */}
@@ -320,17 +404,17 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
             <div key={`empty-${idx}`} />
           ))}
           {daysInMonth.map((day) => {
-            const isPast = isBefore(day, today);
+            const disabled = isDayDisabled(day);
             const isSelected = selectedDate && isSameDay(day, selectedDate);
             const isToday = isSameDay(day, today);
 
             return (
               <button
                 key={day.toISOString()}
-                disabled={isPast}
+                disabled={disabled}
                 onClick={() => setSelectedDate(day)}
                 className={`p-3 rounded-lg font-semibold transition-all ${
-                  isPast
+                  disabled
                     ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600 cursor-not-allowed'
                     : isSelected
                     ? 'bg-bookme-navy text-white dark:bg-bookme-mint dark:text-bookme-navy'
@@ -363,7 +447,13 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
             return (
               <button
                 key={slot.start}
-                onClick={() => setSelectedTime(timeLabel)}
+                onClick={() => {
+                  setSelectedTime(timeLabel);
+                  // Si la franja tiene modalidad fija, la adoptamos
+                  if (slot.modality === 'virtual' || slot.modality === 'presencial') {
+                    setSelectedModality(slot.modality);
+                  }
+                }}
                 className={`p-3 rounded-lg font-semibold transition-all ${
                   selectedTime === timeLabel
                     ? 'bg-bookme-navy text-white dark:bg-bookme-mint dark:text-bookme-navy'
@@ -439,6 +529,67 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
             <div className="font-semibold">{selectedTime}</div>
           </div>
         )}
+
+        {/* Modalidad — selector solo si tanto servicio como franja admiten ambas */}
+        {selectedService && (() => {
+          const selectedSlot = availableSlots.find(
+            (s) => format(new Date(s.start), 'HH:mm') === selectedTime
+          );
+          const slotModality = selectedSlot?.modality ?? 'both';
+          const canChoose = selectedService.modality === 'both' && slotModality === 'both';
+          return (
+          <div className="pt-4 border-t border-border">
+            <div className="text-sm font-medium mb-2">Modalidad</div>
+            {canChoose ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedModality('presencial')}
+                  className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                    selectedModality === 'presencial'
+                      ? 'border-bookme-navy bg-blue-50 text-bookme-navy font-medium dark:border-bookme-mint dark:bg-blue-900/20 dark:text-bookme-mint'
+                      : 'border-border hover:bg-accent'
+                  }`}
+                >
+                  <MapPin className="h-4 w-4" />
+                  Presencial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedModality('virtual')}
+                  className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                    selectedModality === 'virtual'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium dark:border-blue-600 dark:bg-blue-900/20 dark:text-blue-300'
+                      : 'border-border hover:bg-accent'
+                  }`}
+                >
+                  <Video className="h-4 w-4" />
+                  Videoconsulta
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {selectedModality === 'virtual' ? (
+                  <>
+                    <Video className="h-4 w-4 text-blue-500" />
+                    <span>Videoconsulta online</span>
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="h-4 w-4" />
+                    <span>Presencial</span>
+                  </>
+                )}
+              </div>
+            )}
+            {selectedModality === 'virtual' && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Te vamos a enviar el link de la videoconsulta por email. Podrás entrar desde cualquier navegador sin instalar nada.
+              </p>
+            )}
+          </div>
+          );
+        })()}
       </div>
 
       {isLoggedIn ? (

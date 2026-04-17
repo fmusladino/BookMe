@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { verifyCronAuth } from "@/lib/security";
 import { sendTrialExpiringEmail, sendTrialExpiredEmail } from "@bookme/notifications";
 
 /**
@@ -17,11 +18,8 @@ import { sendTrialExpiringEmail, sendTrialExpiredEmail } from "@bookme/notificat
  * Formato: "7d,3d,0d,expired" (CSV de los hitos ya enviados)
  */
 export async function GET(request: NextRequest) {
-  // Verificar secret
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env["CRON_SECRET"]}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const authError = verifyCronAuth(request);
+  if (authError) return authError;
 
   try {
     const supabase = createAdminClient();

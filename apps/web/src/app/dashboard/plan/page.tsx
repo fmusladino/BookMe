@@ -19,7 +19,9 @@ import {
   CalendarDays,
   Sparkles,
   Lock,
+  XCircle,
 } from "lucide-react";
+import { CancelSubscriptionModal } from "@/components/plan/cancel-subscription-modal";
 
 // ─── Types ──────────────────────────────────────────────────
 interface PlanDef {
@@ -88,7 +90,16 @@ export default function PlanPage() {
   const subscriptionStatus = user?.subscription?.status ?? "trialing";
   const daysLeft = user?.subscription?.daysUntilTrialEnd;
   const trialEndsAt = user?.subscription?.trialEndsAt;
+  const cancelledAt = user?.subscription?.cancelledAt;
+  const subscriptionExpiresAt = user?.subscription?.subscriptionExpiresAt;
   const plans = line === "business" ? BIZ_PLANS : HC_PLANS;
+
+  // Modal de baja
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [localCancelledAt, setLocalCancelledAt] = useState<string | null>(null);
+  const isCancelled = !!(cancelledAt ?? localCancelledAt);
+  // Fecha hasta la cual conserva acceso: fin de período pago (si ya pagó) o fin de trial.
+  const accessUntil = subscriptionExpiresAt ?? trialEndsAt ?? null;
 
   // Pre-seleccionar el plan actual si no es free
   useEffect(() => {
@@ -258,16 +269,57 @@ export default function PlanPage() {
                 )}
               </div>
             </div>
-            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-              line === "healthcare"
-                ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-            }`}>
-              {line === "healthcare" ? "Healthcare" : "Business"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                line === "healthcare"
+                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+              }`}>
+                {line === "healthcare" ? "Healthcare" : "Business"}
+              </span>
+              {/* Botón dar de baja — solo para suscripciones pagas activas (no en trial) */}
+              {!isCancelled &&
+                currentPlan !== "free" &&
+                subscriptionStatus === "active" && (
+                  <button
+                    onClick={() => setShowCancelModal(true)}
+                    className="text-xs text-muted-foreground hover:text-red-600 underline underline-offset-2 transition-colors"
+                  >
+                    Dar de baja
+                  </button>
+                )}
+            </div>
           </div>
+
+          {/* Banner de baja programada */}
+          {isCancelled && accessUntil && (
+            <div className="mt-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-900/20">
+              <XCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-amber-900 dark:text-amber-200">
+                <p className="font-medium">Tu suscripción se dará de baja</p>
+                <p className="text-xs mt-0.5">
+                  Conservás acceso completo hasta el{" "}
+                  <strong>
+                    {new Date(accessUntil).toLocaleDateString("es-AR", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </strong>
+                  . Después de esa fecha tu cuenta pasa a modo solo lectura.
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <CancelSubscriptionModal
+        open={showCancelModal}
+        onOpenChange={setShowCancelModal}
+        accessUntil={accessUntil}
+        onCancelled={(until) => setLocalCancelledAt(new Date().toISOString())}
+      />
 
       {/* Billing cycle toggle */}
       <div className="flex items-center justify-center gap-3">

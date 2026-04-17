@@ -24,6 +24,7 @@ export interface NotificationContext {
   specialty: string;
   startsAt: Date;
   serviceName?: string;
+  meetUrl?: string | null;
 }
 
 // Verifica si las credenciales de notificación están configuradas
@@ -52,6 +53,12 @@ async function _sendBookingConfirmationAsync(ctx: NotificationContext) {
   const promises: Promise<unknown>[] = [];
   const baseUrl = process.env["NEXT_PUBLIC_APP_URL"] ?? "https://bookme.ar";
 
+  if (ctx.patientEmail && !isEmailConfigured()) {
+    console.warn(
+      `[Notifications] Email omitido para turno ${ctx.appointmentId}: RESEND_API_KEY no configurada (está como placeholder o vacía).`
+    );
+  }
+
   if (ctx.patientEmail && isEmailConfigured()) {
     promises.push(
       sendConfirmationEmail({
@@ -62,6 +69,7 @@ async function _sendBookingConfirmationAsync(ctx: NotificationContext) {
         startsAt: ctx.startsAt,
         serviceName: ctx.serviceName,
         bookingUrl: `${baseUrl}/mis-turnos`,
+        meetUrl: ctx.meetUrl ?? null,
       })
     );
   }
@@ -259,10 +267,11 @@ export async function getNotificationContext(
       `
       id,
       starts_at,
+      meet_url,
       patient:patients(full_name, email, phone),
       professional:professionals(
         specialty,
-        profile:profiles!id(full_name)
+        profile:profiles!professionals_id_fkey(full_name)
       ),
       service:services(name)
     `
@@ -294,5 +303,6 @@ export async function getNotificationContext(
     specialty: professional.specialty,
     startsAt: new Date(appt.starts_at),
     serviceName: service?.name,
+    meetUrl: (appt as { meet_url?: string | null }).meet_url ?? null,
   };
 }

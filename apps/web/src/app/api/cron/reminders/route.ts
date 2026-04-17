@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { verifyCronAuth } from "@/lib/security";
 import {
   sendReminderEmail,
   sendReminderWhatsApp,
@@ -9,11 +10,9 @@ import {
 // Vercel Cron: 0 9 * * * (9 AM UTC = 6 AM ARG)
 // Envía recordatorios de turnos que ocurren dentro de las próximas 24-26hs
 export async function GET(request: NextRequest) {
-  // Verificar secret del cron para evitar ejecuciones no autorizadas
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env["CRON_SECRET"]}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  // Verificar secret del cron con timing-safe comparison
+  const authError = verifyCronAuth(request);
+  if (authError) return authError;
 
   try {
     const supabase = createAdminClient();
@@ -30,10 +29,11 @@ export async function GET(request: NextRequest) {
         id,
         starts_at,
         notes,
+        meet_url,
         patient:patients(full_name, email, phone),
         professional:professionals(
           specialty,
-          profile:profiles!id(full_name)
+          profile:profiles!professionals_id_fkey(full_name)
         ),
         service:services(name)
         `
@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
         startsAt: new Date(appt.starts_at),
         serviceName: service?.name,
         to: patient.email ?? "",
+        meetUrl: (appt as { meet_url?: string | null }).meet_url ?? null,
       };
 
       // Enviar email si el paciente tiene email

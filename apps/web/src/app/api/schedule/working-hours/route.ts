@@ -16,6 +16,7 @@ export async function PUT(request: NextRequest) {
         dayOfWeek: number;
         startTime: string;
         endTime: string;
+        modality?: "presencial" | "virtual" | "both";
       }>;
     };
 
@@ -46,6 +47,7 @@ export async function PUT(request: NextRequest) {
         day_of_week: h.dayOfWeek,
         start_time: h.startTime,
         end_time: h.endTime,
+        modality: h.modality ?? "both",
       }));
 
       const { error: insertError } = await supabase

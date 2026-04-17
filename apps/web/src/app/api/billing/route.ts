@@ -28,26 +28,7 @@ type BillingItem = {
   period_year: number;
   facturante_ref: string | null;
   created_at: string;
-  patient?: { full_name: string };
-  insurance?: { name: string };
-  appointment?: { starts_at: string };
-};
-
-type BillingResponse = {
-  id: string;
-  professional_id: string;
-  patient_id: string;
-  appointment_id: string;
-  insurance_id: string;
-  practice_code: string;
-  practice_name: string;
-  amount: number;
-  status: string;
-  period_month: number;
-  period_year: number;
-  facturante_ref: string | null;
-  created_at: string;
-  patient?: { full_name: string };
+  patient?: { full_name: string; dni?: string; insurance_number?: string };
   insurance?: { name: string };
   appointment?: { starts_at: string };
 };
@@ -55,10 +36,12 @@ type BillingResponse = {
 /**
  * GET /api/billing — Listar items de facturación del profesional autenticado
  * Query params:
- *   - period=YYYY-MM (ej: 2026-04)
+ *   - period=YYYY-MM (ej: 2026-04) — filtro legacy por mes
+ *   - from=YYYY-MM-DD — inicio del rango de fechas
+ *   - to=YYYY-MM-DD — fin del rango de fechas
  *   - status=pending|submitted|paid
- *   - insurance_id=uuid
- * Retorna resumen + items con joins
+ *   - insurance_id=uuid — filtrar por prepaga específica
+ * Retorna resumen + items con joins extendidos (datos del paciente con prepaga y plan)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -91,6 +74,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period");
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
     const status = searchParams.get("status");
     const insurance_id = searchParams.get("insurance_id");
 
@@ -98,14 +83,23 @@ export async function GET(request: NextRequest) {
       .from("billing_items")
       .select(
         `id, professional_id, patient_id, appointment_id, insurance_id, practice_code, practice_name, amount, status, period_month, period_year, facturante_ref, created_at,
-        patient:patients(full_name),
+        patient:patients(full_name, dni, insurance_number),
         insurance:insurances(name),
         appointment:appointments(starts_at)`
       )
       .eq("professional_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (period) {
+    // Filtro por rango de fechas (prioridad sobre period)
+    if (from && to) {
+      query = query
+        .gte("created_at", `${from}T00:00:00`)
+        .lte("created_at", `${to}T23:59:59`);
+    } else if (from) {
+      query = query.gte("created_at", `${from}T00:00:00`);
+    } else if (to) {
+      query = query.lte("created_at", `${to}T23:59:59`);
+    } else if (period) {
       const [year, month] = period.split("-");
       if (year && month) {
         query = query
@@ -139,19 +133,14 @@ export async function GET(request: NextRequest) {
       count_pending: items.filter((i) => i.status === "pending").length,
       count_submitted: items.filter((i) => i.status === "submitted").length,
       count_paid: items.filter((i) => i.status === "paid").length,
-      items_by_insurance: {} as Record<string, { count: number; total: number }>,
-      items_by_status: {
-        pending: items.filter((i) => i.status === "pending"),
-        submitted: items.filter((i) => i.status === "submitted"),
-        paid: items.filter((i) => i.status === "paid"),
-      },
+      items_by_insurance: {} as Record<string, { insurance_id: string; count: number; total: number }>,
     };
 
-    // Agrupar por seguro
+    // Agrupar por prepaga
     items.forEach((item) => {
-      const insuranceName = item.insurance?.name || "Sin seguro";
+      const insuranceName = item.insurance?.name || "Sin prepaga";
       if (!summary.items_by_insurance[insuranceName]) {
-        summary.items_by_insurance[insuranceName] = { count: 0, total: 0 };
+        summary.items_by_insurance[insuranceName] = { insurance_id: item.insurance_id, count: 0, total: 0 };
       }
       summary.items_by_insurance[insuranceName].count += 1;
       summary.items_by_insurance[insuranceName].total += Number(item.amount);

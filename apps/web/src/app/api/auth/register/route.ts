@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { checkRateLimit, getClientIp } from "@/lib/security";
 
 // Schema base para todos los registros
 const baseSchema = z.object({
@@ -36,6 +37,11 @@ const baseSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting: máx 5 registros por minuto por IP (previene spam de cuentas)
+    const ip = getClientIp(request);
+    const rateLimitError = checkRateLimit(`register:${ip}`, 5, 60_000);
+    if (rateLimitError) return rateLimitError;
+
     const body = (await request.json()) as unknown;
     const parsed = baseSchema.safeParse(body);
 

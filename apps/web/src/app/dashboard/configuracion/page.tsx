@@ -12,6 +12,9 @@ import { toast } from "sonner";
 import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check, Building2, Loader2, X, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { invalidateScheduleConfigGlobal } from "@/hooks/use-schedule-config";
+import { useSession } from "@/hooks/use-session";
+import { AvatarUpload } from "@/components/avatar-upload";
+import { SLOT_DURATIONS } from "@/lib/constants";
 
 const DAYS = [
   { value: 1, label: "Lunes" },
@@ -22,8 +25,6 @@ const DAYS = [
   { value: 6, label: "Sábado" },
   { value: 0, label: "Domingo" },
 ];
-
-const SLOT_DURATIONS = [15, 20, 30, 45, 60, 90];
 
 // Lista precargada de obras sociales y prepagas argentinas
 const INSURANCES_CATALOG = [
@@ -102,6 +103,7 @@ interface WorkingHourRow {
   dayOfWeek: number;
   startTime: string;
   endTime: string;
+  modality: "presencial" | "virtual" | "both";
 }
 
 interface ScheduleConfigState {
@@ -129,15 +131,13 @@ interface ProfInsurance {
 }
 
 export default function ConfiguracionPage() {
+  const { user, refresh: refreshSession } = useSession();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [gcalStatus, setGcalStatus] = useState<GCalStatus>({ connected: false, lastSyncedAt: null, connectedSince: null });
   const [gcalLoading, setGcalLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [visibilityLoading, setVisibilityLoading] = useState(false);
-  const [defaultMeetUrl, setDefaultMeetUrl] = useState("");
-  const [meetUrlSaving, setMeetUrlSaving] = useState(false);
-  const [meetUrlCopied, setMeetUrlCopied] = useState(false);
   // Obras sociales / prepagas del profesional
   const [profInsurances, setProfInsurances] = useState<ProfInsurance[]>([]);
   const [insurancesLoading, setInsurancesLoading] = useState(false);
@@ -157,11 +157,11 @@ export default function ConfiguracionPage() {
   });
 
   const [workingHours, setWorkingHours] = useState<WorkingHourRow[]>([
-    { dayOfWeek: 1, startTime: "09:00", endTime: "18:00" },
-    { dayOfWeek: 2, startTime: "09:00", endTime: "18:00" },
-    { dayOfWeek: 3, startTime: "09:00", endTime: "18:00" },
-    { dayOfWeek: 4, startTime: "09:00", endTime: "18:00" },
-    { dayOfWeek: 5, startTime: "09:00", endTime: "18:00" },
+    { dayOfWeek: 1, startTime: "09:00", endTime: "18:00", modality: "both" },
+    { dayOfWeek: 2, startTime: "09:00", endTime: "18:00", modality: "both" },
+    { dayOfWeek: 3, startTime: "09:00", endTime: "18:00", modality: "both" },
+    { dayOfWeek: 4, startTime: "09:00", endTime: "18:00", modality: "both" },
+    { dayOfWeek: 5, startTime: "09:00", endTime: "18:00", modality: "both" },
   ]);
 
   const fetchConfig = useCallback(async () => {
@@ -182,6 +182,7 @@ export default function ConfiguracionPage() {
           day_of_week: number;
           start_time: string;
           end_time: string;
+          modality?: "presencial" | "virtual" | "both";
         }>;
       };
 
@@ -203,6 +204,7 @@ export default function ConfiguracionPage() {
             dayOfWeek: h.day_of_week,
             startTime: h.start_time.slice(0, 5),
             endTime: h.end_time.slice(0, 5),
+            modality: h.modality ?? "both",
           }))
         );
       }
@@ -214,16 +216,13 @@ export default function ConfiguracionPage() {
     }
   }, []);
 
-  // Fetch visibility status and meet URL
+  // Fetch visibility status
   const fetchVisibility = useCallback(async () => {
     try {
       const res = await fetch("/api/professionals/me/visibility");
       if (res.ok) {
-        const data = await res.json() as { is_visible: boolean; default_meet_url?: string | null };
+        const data = await res.json() as { is_visible: boolean };
         setIsVisible(data.is_visible);
-        if (data.default_meet_url) {
-          setDefaultMeetUrl(data.default_meet_url);
-        }
       }
     } catch {
       // Silencioso
@@ -335,7 +334,7 @@ export default function ConfiguracionPage() {
     const usedDays = new Set(workingHours.map((h) => h.dayOfWeek));
     const availableDay = config.workingDays.find((d) => !usedDays.has(d));
     if (availableDay !== undefined) {
-      setWorkingHours([...workingHours, { dayOfWeek: availableDay, startTime: "09:00", endTime: "18:00" }]);
+      setWorkingHours([...workingHours, { dayOfWeek: availableDay, startTime: "09:00", endTime: "18:00", modality: "both" }]);
     } else {
       toast.info("Todos los días laborales ya tienen horario configurado");
     }
@@ -392,40 +391,18 @@ export default function ConfiguracionPage() {
     }
   };
 
-  const handleSaveMeetUrl = async () => {
-    setMeetUrlSaving(true);
-    try {
-      const res = await fetch("/api/professionals/me/meet-url", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ default_meet_url: defaultMeetUrl || null }),
-      });
-      if (!res.ok) throw new Error("Error al guardar");
-      toast.success("Link de Google Meet guardado");
-    } catch {
-      toast.error("Error al guardar el link de Meet");
-    } finally {
-      setMeetUrlSaving(false);
-    }
-  };
-
-  const handleCopyMeetUrl = () => {
-    if (defaultMeetUrl) {
-      navigator.clipboard.writeText(defaultMeetUrl);
-      setMeetUrlCopied(true);
-      setTimeout(() => setMeetUrlCopied(false), 2000);
-    }
-  };
-
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Derivar working_days de las filas reales de workingHours para mantener sincronía
+      const derivedWorkingDays = [...new Set(workingHours.map((h) => h.dayOfWeek))].sort((a, b) => a - b);
+
       // Guardar configuración general
       const configRes = await fetch("/api/schedule/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workingDays: config.workingDays,
+          workingDays: derivedWorkingDays,
           slotDuration: config.slotDuration,
           lunchBreakStart: config.lunchBreakStart || null,
           lunchBreakEnd: config.lunchBreakEnd || null,
@@ -448,6 +425,9 @@ export default function ConfiguracionPage() {
         const errData = await hoursRes.json() as { error: string };
         throw new Error(errData.error);
       }
+
+      // Actualizar state local con los working_days derivados
+      setConfig((prev) => ({ ...prev, workingDays: derivedWorkingDays }));
 
       // Invalidar cache global para que Agenda y Hoy refresquen la config
       invalidateScheduleConfigGlobal();
@@ -476,6 +456,24 @@ export default function ConfiguracionPage() {
           Configurá tus horarios de trabajo, duración de turnos y descansos.
         </p>
       </div>
+
+      {/* Foto de perfil */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Foto de perfil</CardTitle>
+          <CardDescription>
+            Esta foto se muestra en tu perfil público y en el directorio de BookMe.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AvatarUpload
+            currentUrl={user?.avatar_url ?? null}
+            fallbackName={user?.full_name ?? ""}
+            table="profiles"
+            onAvatarChange={() => refreshSession()}
+          />
+        </CardContent>
+      </Card>
 
       {/* Modo vacaciones */}
       <Card className={config.vacationMode ? "border-amber-300 dark:border-amber-700" : ""}>
@@ -621,68 +619,6 @@ export default function ConfiguracionPage() {
         </CardContent>
       </Card>
 
-      {/* Google Meet */}
-      <Card className={defaultMeetUrl ? "border-green-300 dark:border-green-700" : ""}>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Video className="h-5 w-5 text-blue-500" />
-            <div className="flex-1">
-              <CardTitle className="text-lg">Google Meet</CardTitle>
-              <CardDescription>
-                Configurá tu link fijo de Google Meet para consultas virtuales. Se usará automáticamente en los turnos marcados como virtuales.
-              </CardDescription>
-            </div>
-            {defaultMeetUrl && (
-              <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                Configurado
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="meet-url">Link de Google Meet</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="meet-url"
-                  type="url"
-                  value={defaultMeetUrl}
-                  onChange={(e) => setDefaultMeetUrl(e.target.value)}
-                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
-                  className="flex-1"
-                />
-                {defaultMeetUrl && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={handleCopyMeetUrl}
-                    title="Copiar link"
-                  >
-                    {meetUrlCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Podés crear tu sala en{" "}
-                <a href="https://meet.google.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                  meet.google.com
-                </a>
-                {" "}y pegar el link acá.
-              </p>
-            </div>
-            <Button
-              size="sm"
-              onClick={handleSaveMeetUrl}
-              disabled={meetUrlSaving}
-            >
-              {meetUrlSaving ? "Guardando..." : "Guardar link de Meet"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Configuración general */}
       <Card>
         <CardHeader>
@@ -811,6 +747,18 @@ export default function ConfiguracionPage() {
                   onChange={(e) => updateWorkingHour(index, "endTime", e.target.value)}
                   className="max-w-28"
                 />
+                <Select
+                  value={hour.modality}
+                  onChange={(e) =>
+                    updateWorkingHour(index, "modality", e.target.value)
+                  }
+                  className="max-w-36"
+                  title="Modalidad permitida en esta franja"
+                >
+                  <option value="both">Ambas</option>
+                  <option value="presencial">Presencial</option>
+                  <option value="virtual">Virtual</option>
+                </Select>
                 <Badge variant="secondary">
                   {(() => {
                     const [sh, sm] = hour.startTime.split(":").map(Number);

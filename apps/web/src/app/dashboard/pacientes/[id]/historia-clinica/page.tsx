@@ -24,6 +24,12 @@ import {
   FilePlus,
   FileDown,
   AlertTriangle,
+  Paperclip,
+  Image,
+  File,
+  X,
+  Stethoscope,
+  StickyNote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -42,12 +48,22 @@ interface ClinicalRecord {
   id: string;
   patient_id: string;
   content: string;
+  diagnosis: string | null;
+  notes: string | null;
   appointment_id: string | null;
   is_amendment: boolean;
   amends_record_id: string | null;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
+}
+
+interface Attachment {
+  id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  created_at: string;
 }
 
 interface AuditLog {
@@ -65,6 +81,7 @@ interface Appointment {
   patient_id: string;
   starts_at: string;
   service_name?: string;
+  has_hc?: boolean;
 }
 
 type TabType = "registros" | "auditoria";
@@ -87,8 +104,14 @@ export default function HistoriaClinicaPage() {
   // Modal de crear nueva entrada
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [formContent, setFormContent] = useState("");
+  const [formDiagnosis, setFormDiagnosis] = useState("");
+  const [formNotes, setFormNotes] = useState("");
   const [formAppointmentId, setFormAppointmentId] = useState<string>("");
+  const [formFiles, setFormFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Archivos adjuntos por registro (cache)
+  const [attachmentsByRecord, setAttachmentsByRecord] = useState<Record<string, Attachment[]>>({});
 
   // Modal de enmienda
   const [amendModalOpen, setAmendModalOpen] = useState(false);
@@ -132,13 +155,26 @@ export default function HistoriaClinicaPage() {
     }
   }, [patientId, showArchived]);
 
-  // Cargar citas
+  // Cargar citas y marcar las que ya tienen HC
   const fetchAppointments = useCallback(async () => {
     try {
       const res = await fetch(`/api/appointments?patient_id=${patientId}`);
       if (!res.ok) throw new Error("Error al cargar citas");
       const data = (await res.json()) as { appointments: Appointment[] };
-      setAppointments(data.appointments ?? []);
+      const apts = data.appointments ?? [];
+
+      // Consultar qué appointment_ids ya tienen HC cargada
+      const hcRes = await fetch(`/api/clinical-records?patient_id=${patientId}`);
+      const usedIds = new Set<string>();
+      if (hcRes.ok) {
+        const hcData = (await hcRes.json()) as { records: ClinicalRecord[] };
+        (hcData.records ?? []).forEach((r) => {
+          if (r.appointment_id) usedIds.add(r.appointment_id);
+        });
+      }
+
+      // Marcar las citas que ya tienen HC
+      setAppointments(apts.map((apt) => ({ ...apt, has_hc: usedIds.has(apt.id) })));
     } catch (error) {
       console.error("Error al cargar citas:", error);
     }
@@ -176,9 +212,47 @@ export default function HistoriaClinicaPage() {
   // Crear nueva entrada
   const handleNewRecord = () => {
     setFormContent("");
+    setFormDiagnosis("");
+    setFormNotes("");
     setFormAppointmentId("");
+    setFormFiles([]);
     setCreateModalOpen(true);
   };
+
+  // Manejar selección de archivos
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const validFiles = files.filter((f) => {
+      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(f.type)) {
+        toast.error(`${f.name}: tipo no permitido. Solo JPG, PNG, PDF.`);
+        return false;
+      }
+      if (f.size > 10 * 1024 * 1024) {
+        toast.error(`${f.name}: excede 10 MB`);
+        return false;
+      }
+      return true;
+    });
+    setFormFiles((prev) => [...prev, ...validFiles]);
+    // Reset input para permitir re-selección del mismo archivo
+    e.target.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setFormFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Cargar archivos adjuntos de un registro
+  const fetchAttachments = useCallback(async (recordId: string) => {
+    try {
+      const res = await fetch(`/api/clinical-records/${recordId}/attachments`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { attachments: Attachment[] };
+      setAttachmentsByRecord((prev) => ({ ...prev, [recordId]: data.attachments ?? [] }));
+    } catch (error) {
+      console.error("Error al cargar adjuntos:", error);
+    }
+  }, []);
 
   const handleCreateRecord = async () => {
     if (!formContent.trim() || formContent.trim().length < 10) {
@@ -194,6 +268,8 @@ export default function HistoriaClinicaPage() {
         body: JSON.stringify({
           patient_id: patientId,
           content: formContent.trim(),
+          diagnosis: formDiagnosis.trim() || undefined,
+          notes: formNotes.trim() || undefined,
           appointment_id: formAppointmentId || null,
         }),
       });
@@ -204,11 +280,35 @@ export default function HistoriaClinicaPage() {
         throw new Error(msg);
       }
 
+      const data = (await res.json()) as { record: ClinicalRecord };
+      const newRecordId = data.record.id;
+
+      // Subir archivos adjuntos si hay
+      if (formFiles.length > 0 && newRecordId) {
+        for (const file of formFiles) {
+          const fd = new FormData();
+          fd.append("file", file);
+          try {
+            await fetch(`/api/clinical-records/${newRecordId}/attachments`, {
+              method: "POST",
+              body: fd,
+            });
+          } catch (err) {
+            console.error(`Error subiendo ${file.name}:`, err);
+            toast.error(`Error al subir ${file.name}`);
+          }
+        }
+      }
+
       toast.success("Registro creado");
       setCreateModalOpen(false);
       setFormContent("");
+      setFormDiagnosis("");
+      setFormNotes("");
       setFormAppointmentId("");
+      setFormFiles([]);
       await fetchRecords();
+      await fetchAppointments(); // Refrescar para marcar la cita como "HC cargada"
     } catch (error) {
       console.error("Error al crear registro clínico:", error);
       toast.error(`Error al crear registro clínico: ${error instanceof Error ? error.message : "Error desconocido"}`);
@@ -569,6 +669,17 @@ export default function HistoriaClinicaPage() {
                         </div>
                       </div>
 
+                      {/* Diagnóstico */}
+                      {record.diagnosis && (
+                        <div className="flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-2.5 mb-2">
+                          <Stethoscope className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase text-blue-600 dark:text-blue-400">Diagnóstico</p>
+                            <p className="text-sm text-foreground">{record.diagnosis}</p>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Contenido */}
                       <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                         {isExpanded ? record.content : preview}
@@ -592,6 +703,56 @@ export default function HistoriaClinicaPage() {
                           )}
                         </button>
                       )}
+
+                      {/* Notas internas */}
+                      {record.notes && (
+                        <div className="flex items-start gap-2 rounded-md bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 p-2.5 mt-2">
+                          <StickyNote className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase text-yellow-600 dark:text-yellow-400">Notas internas</p>
+                            <p className="text-xs text-foreground/90 whitespace-pre-wrap">{record.notes}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Archivos adjuntos */}
+                      {(() => {
+                        const attachments = attachmentsByRecord[record.id];
+                        // Cargar adjuntos al expandir o al primer render
+                        if (attachments === undefined && !record.is_amendment) {
+                          fetchAttachments(record.id);
+                        }
+                        if (!attachments || attachments.length === 0) return null;
+                        return (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-[10px] font-semibold uppercase text-muted-foreground flex items-center gap-1">
+                              <Paperclip className="h-3 w-3" />
+                              {attachments.length} {attachments.length === 1 ? "archivo adjunto" : "archivos adjuntos"}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {attachments.map((att) => (
+                                <a
+                                  key={att.id}
+                                  href={`/api/clinical-records/${record.id}/attachments/${att.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1.5 text-xs hover:bg-muted/80 transition-colors"
+                                >
+                                  {att.mime_type.startsWith("image/") ? (
+                                    <Image className="h-3.5 w-3.5 text-blue-500" />
+                                  ) : (
+                                    <File className="h-3.5 w-3.5 text-red-500" />
+                                  )}
+                                  <span className="truncate max-w-[150px]">{att.file_name}</span>
+                                  <span className="text-muted-foreground">
+                                    ({(att.file_size / 1024).toFixed(0)} KB)
+                                  </span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Enmiendas vinculadas */}
                       {amendments.length > 0 && (
@@ -704,11 +865,12 @@ export default function HistoriaClinicaPage() {
 
       {/* ====== MODAL: Crear nueva entrada ====== */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nueva entrada en historia clínica</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Asociar a cita — deshabilitar las que ya tienen HC */}
             <div className="space-y-2">
               <Label htmlFor="appointment-select">Asociar a una cita (opcional)</Label>
               <select
@@ -719,26 +881,115 @@ export default function HistoriaClinicaPage() {
               >
                 <option value="">-- Sin cita --</option>
                 {appointments.map((apt) => (
-                  <option key={apt.id} value={apt.id}>
+                  <option key={apt.id} value={apt.id} disabled={apt.has_hc}>
                     {formatAppointmentDate(apt.id) || `Cita ${apt.id}`}
+                    {apt.has_hc ? " — HC cargada ✓" : ""}
                   </option>
                 ))}
               </select>
             </div>
+
+            {/* Diagnóstico */}
             <div className="space-y-2">
-              <Label htmlFor="record-content">Contenido del registro</Label>
+              <Label htmlFor="record-diagnosis" className="flex items-center gap-1.5">
+                <Stethoscope className="h-3.5 w-3.5" />
+                Diagnóstico
+              </Label>
+              <input
+                id="record-diagnosis"
+                type="text"
+                placeholder="Ej: Dermatitis atópica, Acné vulgar..."
+                value={formDiagnosis}
+                onChange={(e) => setFormDiagnosis(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            {/* Contenido del registro */}
+            <div className="space-y-2">
+              <Label htmlFor="record-content">Contenido del registro *</Label>
               <Textarea
                 id="record-content"
                 placeholder="Registrá la información clínica del paciente..."
                 value={formContent}
                 onChange={(e) => setFormContent(e.target.value)}
-                className="min-h-40 resize-none"
+                className="min-h-32 resize-none"
               />
               <p className="text-xs text-muted-foreground">
                 {formContent.length} caracteres
                 {formContent.trim().length < 10 && " (mínimo 10)"}
               </p>
             </div>
+
+            {/* Notas internas */}
+            <div className="space-y-2">
+              <Label htmlFor="record-notes" className="flex items-center gap-1.5">
+                <StickyNote className="h-3.5 w-3.5" />
+                Notas internas (solo visibles por vos)
+              </Label>
+              <Textarea
+                id="record-notes"
+                placeholder="Notas privadas, observaciones, recordatorios..."
+                value={formNotes}
+                onChange={(e) => setFormNotes(e.target.value)}
+                className="min-h-20 resize-none"
+              />
+            </div>
+
+            {/* Archivos adjuntos */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" />
+                Archivos adjuntos
+              </Label>
+              <div className="rounded-md border border-dashed border-input p-4">
+                <label className="flex flex-col items-center gap-2 cursor-pointer text-center">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Paperclip className="h-4 w-4" />
+                    Hacé click para seleccionar archivos
+                  </div>
+                  <p className="text-xs text-muted-foreground/70">
+                    JPG, PNG, PDF — máx. 10 MB por archivo
+                  </p>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              {/* Lista de archivos seleccionados */}
+              {formFiles.length > 0 && (
+                <div className="space-y-1.5">
+                  {formFiles.map((file, idx) => (
+                    <div
+                      key={`${file.name}-${idx}`}
+                      className="flex items-center gap-2 rounded-md bg-muted p-2 text-sm"
+                    >
+                      {file.type.startsWith("image/") ? (
+                        <Image className="h-4 w-4 text-blue-500 shrink-0" />
+                      ) : (
+                        <File className="h-4 w-4 text-red-500 shrink-0" />
+                      )}
+                      <span className="truncate flex-1">{file.name}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {(file.size / 1024).toFixed(0)} KB
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(idx)}
+                        className="p-0.5 hover:bg-background rounded transition-colors shrink-0"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2.5">
               <p className="text-xs text-amber-800 dark:text-amber-300">
                 Una vez creada, esta entrada no podrá editarse ni eliminarse.

@@ -334,6 +334,10 @@ export default function HoyPage() {
                     ? { label: "Pendiente", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" }
                     : { label: "Confirmado", cls: "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300" };
 
+            // Badge "Próximo" si falta <30 min y el turno no terminó ni se canceló
+            const minutesUntilStart = (parseISO(apt.starts_at).getTime() - Date.now()) / 60000;
+            const isSoon = !isCancelled && !isCompleted && !isNoShow && minutesUntilStart > -5 && minutesUntilStart < 30;
+
             return (
               <div
                 key={slot.time}
@@ -356,6 +360,11 @@ export default function HoyPage() {
                     )}>
                       {apt.patient.full_name.toUpperCase()}
                     </p>
+                    {isSoon && (
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white animate-pulse">
+                        Próximo
+                      </span>
+                    )}
                     <span className={cn("shrink-0 px-2 py-0.5 rounded text-[10px] font-bold", statusBadge.cls)}>
                       {statusBadge.label}
                     </span>
@@ -383,6 +392,22 @@ export default function HoyPage() {
                     <div className="flex items-center gap-1 mt-1 pl-[52px]">
                       <Phone className="h-3 w-3 text-muted-foreground/40" />
                       <span className="text-[11px] text-muted-foreground">{apt.patient.phone}</span>
+                    </div>
+                  )}
+
+                  {/* Videoconsulta — botón Entrar */}
+                  {apt.modality === "virtual" && apt.meet_url && !isCancelled && (
+                    <div className="mt-2 pl-[52px]">
+                      <a
+                        href={apt.meet_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs font-semibold transition-colors"
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                        Entrar a la videoconsulta
+                      </a>
                     </div>
                   )}
                 </div>

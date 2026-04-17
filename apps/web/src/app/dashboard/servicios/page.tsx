@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
+import { SLOT_DURATIONS as DURATION_PRESETS } from "@/lib/constants";
 
 interface Insurance {
   id: string;
@@ -44,8 +45,6 @@ interface CreateServiceForm {
   modality: "presencial" | "virtual" | "both";
   insurance_ids: string[];
 }
-
-const DURATION_PRESETS = [15, 20, 30, 45, 60, 90, 120];
 
 export default function ServiciosPage() {
   const { user } = useSession();

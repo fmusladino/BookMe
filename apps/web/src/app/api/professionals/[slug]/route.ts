@@ -44,19 +44,41 @@ export async function GET(
       .eq('id', professional.id)
       .single();
 
-    // 3. Fetch services
-    const { data: services } = await supabase
-      .from('services')
-      .select('id, name, duration_minutes, price, show_price, is_active')
-      .eq('professional_id', professional.id)
-      .eq('is_active', true)
-      .order('name');
+    // 3. Fetch services, schedule config and working hours in parallel
+    const [servicesResult, configResult, workingHoursResult] = await Promise.all([
+      supabase
+        .from('services')
+        .select('id, name, duration_minutes, price, show_price, is_active, modality')
+        .eq('professional_id', professional.id)
+        .eq('is_active', true)
+        .order('name'),
+      supabase
+        .from('schedule_configs')
+        .select('working_days, vacation_mode, vacation_from, vacation_until')
+        .eq('professional_id', professional.id)
+        .single(),
+      supabase
+        .from('working_hours')
+        .select('day_of_week, start_time, end_time')
+        .eq('professional_id', professional.id)
+        .order('day_of_week')
+        .order('start_time'),
+    ]);
 
     return NextResponse.json({
       professional: {
         ...professional,
         profile: profile || { id: professional.id, full_name: 'Profesional', avatar_url: null, phone: null },
-        services: services ?? [],
+        services: servicesResult.data ?? [],
+        scheduleConfig: configResult.data
+          ? {
+              working_days: configResult.data.working_days ?? [],
+              vacation_mode: configResult.data.vacation_mode ?? false,
+              vacation_from: configResult.data.vacation_from,
+              vacation_until: configResult.data.vacation_until,
+            }
+          : null,
+        workingHours: workingHoursResult.data ?? [],
       },
     });
   } catch (error) {

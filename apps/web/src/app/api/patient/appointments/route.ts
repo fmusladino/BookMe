@@ -48,7 +48,7 @@ export async function GET() {
     const { data: appts, error: apptsError } = await adminClient
       .from("appointments")
       .select(
-        `id, starts_at, ends_at, status, notes, professional_id,
+        `id, starts_at, ends_at, status, notes, modality, meet_url, professional_id,
          service:services(name, duration_minutes),
          professional:professionals(specialty, city, public_slug)`
       )
@@ -85,6 +85,8 @@ export async function GET() {
       ends_at: a.ends_at,
       status: a.status,
       notes: a.notes,
+      modality: (a as { modality?: string }).modality ?? "presencial",
+      meet_url: (a as { meet_url?: string | null }).meet_url ?? null,
       service: a.service,
       professional: {
         ...(a.professional as any),

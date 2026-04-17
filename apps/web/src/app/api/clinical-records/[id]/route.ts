@@ -69,17 +69,15 @@ export async function GET(
       request.headers.get("x-real-ip") ||
       "0.0.0.0";
 
-    await adminClient
+    const { error: auditErr } = await adminClient
       .from("clinical_record_audit")
       .insert({
         record_id: record.id,
         accessed_by: user.id,
         action: "read",
         ip_address: ipAddress,
-      })
-      .catch((err) => {
-        console.error("Error registrando auditoría READ:", err);
       });
+    if (auditErr) console.error("Error registrando auditoría READ:", auditErr.message);
 
     // Obtener enmiendas de este registro (si las hay)
     const { data: amendments } = await adminClient
@@ -179,7 +177,7 @@ export async function PATCH(
       }
 
       // Auditoría
-      await adminClient
+      const { error: archiveAuditErr } = await adminClient
         .from("clinical_record_audit")
         .insert({
           record_id: id,
@@ -187,10 +185,8 @@ export async function PATCH(
           action: isArchive ? "delete" : "update",
           ip_address: ipAddress,
           details: { type: isArchive ? "archive" : "unarchive" },
-        })
-        .catch((err) => {
-          console.error("Error registrando auditoría ARCHIVE:", err);
         });
+      if (archiveAuditErr) console.error("Error registrando auditoría ARCHIVE:", archiveAuditErr.message);
 
       return NextResponse.json({
         message: isArchive
@@ -246,7 +242,7 @@ export async function PATCH(
     }
 
     // Auditoría para la enmienda
-    await adminClient
+    const { error: amendAuditErr } = await adminClient
       .from("clinical_record_audit")
       .insert({
         record_id: amendment.id,
@@ -257,10 +253,8 @@ export async function PATCH(
           amends_record_id: id,
           reason,
         },
-      })
-      .catch((err) => {
-        console.error("Error registrando auditoría AMENDMENT:", err);
       });
+    if (amendAuditErr) console.error("Error registrando auditoría AMENDMENT:", amendAuditErr.message);
 
     // Desencriptar para devolver en respuesta
     const decryptedContent = await decryptClinicalRecord(

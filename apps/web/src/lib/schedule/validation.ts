@@ -70,7 +70,8 @@ export async function validateAppointmentSlot(
   supabase: SupabaseClient<Database>,
   professionalId: string,
   startsAt: string,
-  endsAt: string
+  endsAt: string,
+  modality?: "presencial" | "virtual"
 ): Promise<ValidationResult> {
   try {
     // Obtener configuración de agenda del profesional
@@ -147,25 +148,38 @@ export async function validateAppointmentSlot(
     const appointmentStartTime = localStart.hours * 60 + localStart.minutes;
     const appointmentEndTime = localEnd.hours * 60 + localEnd.minutes;
 
-    // Verificar que el turno completo esté dentro de algún rango de horario de atención
+    // Verificar que el turno completo esté dentro de algún rango de horario
+    // y que la modalidad del turno sea compatible con la franja (si se pasó)
     let withinWorkingHours = false;
+    let modalityBlocked = false;
 
     for (const hour of workingHours) {
-      // Parsear start_time y end_time (formato HH:MM)
       const [startHour, startMin] = hour.start_time.split(":").map(Number);
       const [endHour, endMin] = hour.end_time.split(":").map(Number);
 
       const slotStart = startHour * 60 + startMin;
       const slotEnd = endHour * 60 + endMin;
 
-      // Verificar que el turno completo esté dentro de este rango
       if (appointmentStartTime >= slotStart && appointmentEndTime <= slotEnd) {
-        withinWorkingHours = true;
-        break;
+        // El turno cae dentro de esta franja. Ahora chequear compatibilidad.
+        const whModality = (hour as { modality?: string }).modality ?? "both";
+        if (!modality || whModality === "both" || whModality === modality) {
+          withinWorkingHours = true;
+          break;
+        } else {
+          modalityBlocked = true;
+        }
       }
     }
 
     if (!withinWorkingHours) {
+      if (modalityBlocked) {
+        const tipo = modality === "virtual" ? "videoconsultas" : "turnos presenciales";
+        return {
+          valid: false,
+          error: `Esa franja horaria no admite ${tipo}. Elegí otro horario o cambiá la modalidad en Configuración.`,
+        };
+      }
       return {
         valid: false,
         error: "El horario está fuera del horario de atención",

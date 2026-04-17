@@ -17,6 +17,7 @@ import {
   FileText,
   Download,
   ShieldCheck,
+  Video,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -26,6 +27,8 @@ interface Appointment {
   ends_at: string;
   status: string;
   notes: string | null;
+  modality?: "presencial" | "virtual";
+  meet_url?: string | null;
   service: { name: string; duration_minutes: number } | null;
   professional: {
     specialty: string;
@@ -131,8 +134,9 @@ export default function MisTurnosPage() {
       });
       const res = await fetch(`/api/clinical-records/export?${params.toString()}`);
       if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Error desconocido" }));
-        throw new Error((data as { error?: string }).error || "Error al descargar");
+        const data = await res.json().catch(() => ({ error: "Error desconocido" })) as { error?: string; detail?: string };
+        const msg = [data.error, data.detail].filter(Boolean).join(": ");
+        throw new Error(msg || "Error al descargar");
       }
 
       const blob = await res.blob();
@@ -405,13 +409,35 @@ export default function MisTurnosPage() {
                             <Clock className="w-3.5 h-3.5" />
                             {format(new Date(apt.starts_at), "HH:mm")}
                           </span>
-                          {apt.professional?.city && (
+                          {apt.modality === "virtual" ? (
+                            <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                              <Video className="w-3.5 h-3.5" />
+                              Videoconsulta
+                            </span>
+                          ) : apt.professional?.city ? (
                             <span className="flex items-center gap-1">
                               <MapPin className="w-3.5 h-3.5" />
                               {apt.professional.city}
                             </span>
-                          )}
+                          ) : null}
                         </div>
+
+                        {apt.modality === "virtual" && apt.meet_url && apt.status !== "cancelled" && (
+                          <div className="mt-3">
+                            <a
+                              href={apt.meet_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-sm font-semibold transition-colors"
+                            >
+                              <Video className="w-4 h-4" />
+                              Entrar a la videoconsulta
+                            </a>
+                            <p className="mt-1.5 text-xs text-muted-foreground">
+                              Entrá unos minutos antes del horario del turno. Se abre en el navegador.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

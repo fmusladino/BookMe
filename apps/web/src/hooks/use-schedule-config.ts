@@ -8,6 +8,7 @@ export interface WorkingHour {
   day_of_week: number; // 0=Dom, 1=Lun, ..., 6=Sáb
   start_time: string;  // "HH:MM"
   end_time: string;    // "HH:MM"
+  modality?: "presencial" | "virtual" | "both";
 }
 
 export interface ScheduleConfig {

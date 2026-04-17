@@ -41,6 +41,11 @@ const nextConfig: NextConfig = {
 
   // Cabeceras de seguridad + caching
   async headers() {
+    const isDev = process.env.NODE_ENV === "development";
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    // Extraer hostname de Supabase para CSP
+    const supabaseHost = supabaseUrl ? new URL(supabaseUrl).hostname : "*.supabase.co";
+
     return [
       {
         source: "/(.*)",
@@ -52,6 +57,44 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(self)",
           },
+          // HSTS: fuerza HTTPS durante 1 año, incluye subdominios
+          ...(!isDev
+            ? [
+                {
+                  key: "Strict-Transport-Security",
+                  value: "max-age=31536000; includeSubDomains; preload",
+                },
+              ]
+            : []),
+          // Content-Security-Policy
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              // Scripts: self + inline para Next.js hydration
+              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+              // Estilos: self + inline para Tailwind/CSS-in-JS
+              "style-src 'self' 'unsafe-inline'",
+              // Imágenes: self + Supabase storage + Google avatars + data URIs
+              `img-src 'self' ${supabaseHost} *.supabase.co lh3.googleusercontent.com data: blob:`,
+              // Fonts
+              "font-src 'self' data:",
+              // Conexiones: self + Supabase (API + Realtime WS) + analytics
+              `connect-src 'self' ${supabaseHost} *.supabase.co wss://${supabaseHost}${isDev ? " ws://localhost:*" : ""}`,
+              // Frames: ninguno
+              "frame-src 'none'",
+              // Forms: solo a self
+              "form-action 'self'",
+              // Base URI
+              "base-uri 'self'",
+              // Object: ninguno (bloquea Flash, Java applets)
+              "object-src 'none'",
+              // Upgrade insecure requests en producción
+              ...(!isDev ? ["upgrade-insecure-requests"] : []),
+            ].join("; "),
+          },
+          // X-DNS-Prefetch-Control
+          { key: "X-DNS-Prefetch-Control", value: "on" },
         ],
       },
       // Cache agresivo para assets estáticos (fonts, icons, imágenes)

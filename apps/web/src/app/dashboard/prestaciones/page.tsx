@@ -223,9 +223,11 @@ export default function PrestacionesPage() {
 
     setSaving(true);
     try {
+      // Generar código legible basado en el nombre del servicio o la descripción
+      const codeBase = description.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 8) || "CONS";
       const payload = {
         insurance_id: form.insurance_id,
-        code: form.service_id || "SIN-COD",
+        code: codeBase,
         description,
         amount: Number(form.amount),
         valid_from: form.valid_from || undefined,
@@ -536,12 +538,14 @@ export default function PrestacionesPage() {
                     key={p.id}
                     className={`flex items-center gap-4 py-3 ${!p.is_active ? "opacity-50" : ""}`}
                   >
-                    {/* Código */}
-                    <div className="min-w-[80px]">
-                      <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-mono font-medium">
-                        {p.code}
-                      </span>
-                    </div>
+                    {/* Código — ocultar si es UUID */}
+                    {!/^[0-9a-f]{8}-[0-9a-f]{4}-/.test(p.code) && (
+                      <div className="min-w-[80px]">
+                        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-mono font-medium">
+                          {p.code}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Descripción */}
                     <div className="flex-1 min-w-0">

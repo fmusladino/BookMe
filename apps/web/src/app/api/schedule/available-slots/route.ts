@@ -5,6 +5,9 @@ import type { ScheduleConfig, WorkingHour, ScheduleBlock, Appointment } from "@/
 interface Slot {
   start: string;
   end: string;
+  // Modalidad permitida por la franja horaria donde cae este slot.
+  // Si es 'both', el cliente puede elegir. Si es 'presencial' o 'virtual', está fijada.
+  modality: "presencial" | "virtual" | "both";
 }
 
 interface SlotsResponse {
@@ -37,6 +40,13 @@ export async function GET(request: NextRequest) {
     console.log("[AVAILABLE-SLOTS] Request:", { professionalId, date });
     const serviceId = searchParams.get("serviceId");
     const durationParam = searchParams.get("duration");
+    // Modalidad explícita (cuando no hay serviceId). Para el flujo del profesional
+    // que elige "presencial" o "virtual" antes de cargar servicio.
+    const modalityParam = searchParams.get("modality") as
+      | "presencial"
+      | "virtual"
+      | "both"
+      | null;
 
     // Validate required parameters
     if (!professionalId || !date) {
@@ -139,13 +149,15 @@ export async function GET(request: NextRequest) {
       } as SlotsResponse);
     }
 
-    // Determine slot duration
+    // Determine slot duration AND modality to filter by
     let slotDuration = config.slot_duration || 30;
+    let serviceModality: "presencial" | "virtual" | "both" | null =
+      modalityParam ?? null;
 
     if (serviceId) {
       const { data: service, error: serviceError } = await supabase
         .from("services")
-        .select("duration_minutes")
+        .select("duration_minutes, modality")
         .eq("id", serviceId)
         .eq("professional_id", professionalId)
         .single();
@@ -160,11 +172,37 @@ export async function GET(request: NextRequest) {
       }
 
       slotDuration = service.duration_minutes || slotDuration;
+      // La modalidad del servicio tiene prioridad sobre la del query param
+      serviceModality = (service as { modality?: "presencial" | "virtual" | "both" }).modality ?? serviceModality;
     } else if (durationParam) {
       const parsed = parseInt(durationParam);
       if (!isNaN(parsed) && parsed > 0) {
         slotDuration = parsed;
       }
+    }
+
+    // Filtrar working_hours por compatibilidad de modalidad
+    // - Service "presencial" → solo franjas presencial o both
+    // - Service "virtual"    → solo franjas virtual o both
+    // - Service "both" o sin modalidad → todas las franjas
+    const filteredWorkingHours = serviceModality && serviceModality !== "both"
+      ? workingHoursList.filter((wh) => {
+          const whModality = (wh as { modality?: string }).modality ?? "both";
+          return whModality === "both" || whModality === serviceModality;
+        })
+      : workingHoursList;
+
+    // Si después del filtro no queda ninguna franja, no hay disponibilidad
+    if (filteredWorkingHours.length === 0) {
+      return NextResponse.json({
+        slots: [],
+        meta: {
+          date: date,
+          duration: slotDuration,
+          workingHours: null,
+          vacationMode: false,
+        },
+      } as SlotsResponse);
     }
 
     // Fetch appointments y blocks en paralelo (antes era secuencial)
@@ -206,18 +244,26 @@ export async function GET(request: NextRequest) {
     const appointments = appointmentsResult.data;
     const blocks = blocksResult.data;
 
+    // Helper: crear Date a partir de hora local Argentina (UTC-3)
+    // Los horarios en working_hours están en hora local, no UTC.
+    const AR_OFFSET = "-03:00";
+    const toArgDate = (dateStr: string, hour: number, min: number): Date => {
+      const hh = String(hour).padStart(2, "0");
+      const mm = String(min).padStart(2, "0");
+      return new Date(`${dateStr}T${hh}:${mm}:00${AR_OFFSET}`);
+    };
+
     // Generate all potential slots from ALL working hour ranges
     const allSlots: Slot[] = [];
 
-    for (const wh of workingHoursList) {
+    for (const wh of filteredWorkingHours) {
       const [startHour, startMin] = wh.start_time.split(":").map(Number);
       const [endHour, endMin] = wh.end_time.split(":").map(Number);
 
-      const rangeStart = new Date(targetDate);
-      rangeStart.setUTCHours(startHour, startMin, 0, 0);
-
-      const rangeEnd = new Date(targetDate);
-      rangeEnd.setUTCHours(endHour, endMin, 0, 0);
+      const rangeStart = toArgDate(date, startHour, startMin);
+      const rangeEnd = toArgDate(date, endHour, endMin);
+      const rangeModality =
+        ((wh as { modality?: "presencial" | "virtual" | "both" }).modality ?? "both");
 
       let currentTime = new Date(rangeStart);
 
@@ -229,6 +275,7 @@ export async function GET(request: NextRequest) {
           allSlots.push({
             start: slotStart.toISOString(),
             end: slotEnd.toISOString(),
+            modality: rangeModality,
           });
         }
 
@@ -254,12 +301,8 @@ export async function GET(request: NextRequest) {
     if (hasLunch) {
       const [lsh, lsm] = config.lunch_break_start!.split(":").map(Number);
       const [leh, lem] = config.lunch_break_end!.split(":").map(Number);
-      const ls = new Date(targetDate);
-      ls.setUTCHours(lsh, lsm, 0, 0);
-      const le = new Date(targetDate);
-      le.setUTCHours(leh, lem, 0, 0);
-      lunchStartTs = ls.getTime();
-      lunchEndTs = le.getTime();
+      lunchStartTs = toArgDate(date, lsh, lsm).getTime();
+      lunchEndTs = toArgDate(date, leh, lem).getTime();
     }
 
     // Filtrar slots con comparaciones numéricas puras (mucho más rápido)
@@ -285,9 +328,9 @@ export async function GET(request: NextRequest) {
       return true;
     });
 
-    // Para el meta, usar la primera y última franja horaria
-    const firstWh = workingHoursList[0];
-    const lastWh = workingHoursList[workingHoursList.length - 1];
+    // Para el meta, usar la primera y última franja horaria (ya filtrada)
+    const firstWh = filteredWorkingHours[0];
+    const lastWh = filteredWorkingHours[filteredWorkingHours.length - 1];
 
     return NextResponse.json({
       slots: availableSlots,

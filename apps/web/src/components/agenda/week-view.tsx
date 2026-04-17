@@ -356,6 +356,11 @@ export const WeekView = memo(function WeekView({
                   const style = STATUS_STYLES[apt.status] ?? STATUS_STYLES["pending"];
                   const isCancelled = apt.status === "cancelled";
                   const isNoShow = apt.status === "no_show";
+                  const isCompleted = apt.status === "completed";
+                  // Próximo si falta <30 min y aún no terminó
+                  const minutesUntilStart = (parseISO(apt.starts_at).getTime() - Date.now()) / 60000;
+                  const isSoon = !isCancelled && !isCompleted && !isNoShow && minutesUntilStart > -5 && minutesUntilStart < 30;
+                  const hasMeet = apt.modality === "virtual" && apt.meet_url;
 
                   return (
                     <div
@@ -370,7 +375,8 @@ export const WeekView = memo(function WeekView({
                         "absolute left-1 right-1 z-20 cursor-grab overflow-hidden rounded-md shadow-sm active:cursor-grabbing hover:shadow-md transition-all",
                         style.card,
                         style.border,
-                        isCancelled && "opacity-60 cursor-pointer"
+                        isCancelled && "opacity-60 cursor-pointer",
+                        isSoon && "ring-2 ring-blue-500"
                       )}
                       style={{
                         top: `${top}px`,
@@ -386,8 +392,19 @@ export const WeekView = memo(function WeekView({
                           )}>
                             {apt.patient.full_name}
                           </p>
-                          {/* Icono de modalidad */}
-                          {apt.modality === "virtual" ? (
+                          {/* Icono de modalidad — clickeable si es virtual con link */}
+                          {hasMeet ? (
+                            <a
+                              href={apt.meet_url ?? "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              title="Entrar a la videoconsulta"
+                              className="flex-shrink-0 rounded hover:bg-blue-500/20 p-0.5 -m-0.5 transition-colors"
+                            >
+                              <Video className="h-3 w-3 text-blue-500" />
+                            </a>
+                          ) : apt.modality === "virtual" ? (
                             <Video className="h-3 w-3 flex-shrink-0 text-blue-500 mt-0.5" />
                           ) : (
                             <MapPin className="h-3 w-3 flex-shrink-0 text-muted-foreground/50 mt-0.5" />

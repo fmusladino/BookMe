@@ -7,6 +7,9 @@ export interface SubscriptionInfo {
   status: string;
   trialEndsAt: string | null;
   daysUntilTrialEnd: number | null;
+  subscriptionExpiresAt?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
 }
 
 export interface SessionUser {

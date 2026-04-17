@@ -5,11 +5,11 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   CreditCard,
-  FileText,
   TrendingUp,
   Plus,
   Download,
-  Trash2,
+  Filter,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
 
@@ -35,9 +34,15 @@ interface BillingItem {
   period_year: number;
   facturante_ref: string | null;
   created_at: string;
-  patient?: { full_name: string };
+  patient?: { full_name: string; dni?: string; insurance_number?: string };
   insurance?: { name: string };
   appointment?: { starts_at: string };
+}
+
+interface InsuranceSummary {
+  insurance_id: string;
+  count: number;
+  total: number;
 }
 
 interface BillingResponse {
@@ -47,8 +52,7 @@ interface BillingResponse {
     count_pending: number;
     count_submitted: number;
     count_paid: number;
-    items_by_insurance: Record<string, { count: number; total: number }>;
-    items_by_status: Record<string, BillingItem[]>;
+    items_by_insurance: Record<string, InsuranceSummary>;
   };
 }
 
@@ -66,14 +70,22 @@ export default function FacturacionPage() {
   const { user } = useSession();
   const [data, setData] = useState<BillingResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  // Filtros por rango de fechas
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1); // Primer día del mes actual
+    return d.toISOString().slice(0, 10);
   });
+  const [dateTo, setDateTo] = useState<string>(() => {
+    return new Date().toISOString().slice(0, 10);
+  });
+
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "submitted" | "paid">("all");
   const [insuranceFilter, setInsuranceFilter] = useState<string>("");
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [insurances, setInsurances] = useState<any[]>([]);
   const [createForm, setCreateForm] = useState<CreateBillingForm>({
@@ -90,7 +102,8 @@ export default function FacturacionPage() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (period) params.append("period", period);
+      if (dateFrom) params.append("from", dateFrom);
+      if (dateTo) params.append("to", dateTo);
       if (statusFilter !== "all") params.append("status", statusFilter);
       if (insuranceFilter) params.append("insurance_id", insuranceFilter);
 
@@ -104,11 +117,21 @@ export default function FacturacionPage() {
     } finally {
       setLoading(false);
     }
-  }, [period, statusFilter, insuranceFilter]);
+  }, [dateFrom, dateTo, statusFilter, insuranceFilter]);
+
+  const fetchInsurances = useCallback(async () => {
+    try {
+      const res = await fetch("/api/professionals/me/insurances");
+      if (!res.ok) return;
+      const json = (await res.json()) as any;
+      setInsurances(json.insurances || []);
+    } catch (error) {
+      console.error("Error fetching insurances:", error);
+    }
+  }, []);
 
   const fetchAppointments = useCallback(async () => {
     try {
-      // Get last 90 days of appointments for selection
       const to = new Date();
       const from = new Date();
       from.setDate(from.getDate() - 90);
@@ -117,7 +140,6 @@ export default function FacturacionPage() {
       );
       if (!res.ok) return;
       const json = (await res.json()) as any;
-      // Filter for completed or confirmed appointments
       const filtered = (json.appointments || []).filter(
         (apt: any) => apt.status === "completed" || apt.status === "confirmed"
       );
@@ -127,22 +149,47 @@ export default function FacturacionPage() {
     }
   }, []);
 
-  const fetchInsurances = useCallback(async () => {
-    try {
-      const res = await fetch("/api/insurances");
-      if (!res.ok) return;
-      const json = (await res.json()) as any;
-      setInsurances(json.insurances || []);
-    } catch (error) {
-      console.error("Error fetching insurances:", error);
-    }
-  }, []);
-
   useEffect(() => {
     void fetchBillingData();
-    void fetchAppointments();
     void fetchInsurances();
-  }, [fetchBillingData, fetchAppointments, fetchInsurances]);
+    void fetchAppointments();
+  }, [fetchBillingData, fetchInsurances, fetchAppointments]);
+
+  // Exportar PDF
+  const handleExportPDF = async () => {
+    setExportingPDF(true);
+    try {
+      const params = new URLSearchParams();
+      if (dateFrom) params.append("from", dateFrom);
+      if (dateTo) params.append("to", dateTo);
+      if (insuranceFilter) params.append("insurance_id", insuranceFilter);
+      if (statusFilter !== "all") params.append("status", statusFilter);
+
+      const res = await fetch(`/api/billing/export?${params.toString()}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Error desconocido" })) as { error?: string };
+        throw new Error(err.error || "Error al exportar");
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ||
+        `facturacion_${dateFrom}_${dateTo}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("PDF exportado correctamente");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Error al exportar PDF");
+    } finally {
+      setExportingPDF(false);
+    }
+  };
 
   const handleCreateBillingItem = async () => {
     if (!createForm.appointment_id || !createForm.insurance_id || !createForm.practice_code || !createForm.practice_name || !createForm.amount) {
@@ -166,16 +213,11 @@ export default function FacturacionPage() {
       });
 
       if (!res.ok) throw new Error("Error al crear item de facturación");
-      toast.success("Item de facturación creado correctamente");
+      toast.success("Item de facturación creado");
       setCreateModalOpen(false);
       setCreateForm({
-        appointment_id: "",
-        insurance_id: "",
-        practice_code: "",
-        practice_name: "",
-        amount: "",
-        period_month: "",
-        period_year: "",
+        appointment_id: "", insurance_id: "", practice_code: "",
+        practice_name: "", amount: "", period_month: "", period_year: "",
       });
       await fetchBillingData();
     } catch (error) {
@@ -191,9 +233,8 @@ export default function FacturacionPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-
       if (!res.ok) throw new Error("Error al actualizar estado");
-      toast.success("Estado actualizado correctamente");
+      toast.success("Estado actualizado");
       await fetchBillingData();
     } catch (error) {
       console.error(error);
@@ -203,10 +244,9 @@ export default function FacturacionPage() {
 
   const handleBatchStatusUpdate = async (newStatus: "submitted" | "paid") => {
     if (selectedItems.size === 0) {
-      toast.error("Por favor selecciona al menos un item");
+      toast.error("Selecciona al menos un item");
       return;
     }
-
     try {
       await Promise.all(
         Array.from(selectedItems).map((itemId) =>
@@ -217,7 +257,7 @@ export default function FacturacionPage() {
           })
         )
       );
-      toast.success(`${selectedItems.size} items actualizados correctamente`);
+      toast.success(`${selectedItems.size} items actualizados`);
       setSelectedItems(new Set());
       await fetchBillingData();
     } catch (error) {
@@ -228,11 +268,10 @@ export default function FacturacionPage() {
 
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm("¿Estás seguro de que quieres eliminar este item?")) return;
-
     try {
       const res = await fetch(`/api/billing/${itemId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Error al eliminar item");
-      toast.success("Item eliminado correctamente");
+      toast.success("Item eliminado");
       await fetchBillingData();
     } catch (error) {
       console.error(error);
@@ -242,16 +281,26 @@ export default function FacturacionPage() {
 
   const toggleItemSelection = (itemId: string) => {
     const newSet = new Set(selectedItems);
-    if (newSet.has(itemId)) {
-      newSet.delete(itemId);
-    } else {
-      newSet.add(itemId);
-    }
+    if (newSet.has(itemId)) newSet.delete(itemId);
+    else newSet.add(itemId);
     setSelectedItems(newSet);
   };
 
+  // Agrupar items por prepaga para mostrar subtotales
+  const itemsByInsurance: Record<string, { name: string; items: BillingItem[]; total: number }> = {};
+  (data?.items || []).forEach((item) => {
+    const key = item.insurance_id || "sin-prepaga";
+    const name = item.insurance?.name || "Particular";
+    if (!itemsByInsurance[key]) {
+      itemsByInsurance[key] = { name, items: [], total: 0 };
+    }
+    itemsByInsurance[key].items.push(item);
+    itemsByInsurance[key].total += Number(item.amount);
+  });
+
   const filteredItems = data?.items || [];
   const summary = data?.summary;
+  const grandTotal = summary?.total_amount || 0;
 
   if (!user || user.role !== "professional" || user.professional?.line !== "healthcare") {
     return (
@@ -270,12 +319,12 @@ export default function FacturacionPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Facturación</h1>
-          <p className="text-sm text-muted-foreground">Liquidación de obras sociales</p>
+          <p className="text-sm text-muted-foreground">Liquidación de obras sociales y prepagas</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={exportingPDF || filteredItems.length === 0}>
             <Download className="mr-1 h-3.5 w-3.5" />
-            Exportar
+            {exportingPDF ? "Exportando..." : "Exportar PDF"}
           </Button>
           <Button size="sm" onClick={() => setCreateModalOpen(true)}>
             <Plus className="mr-1 h-3.5 w-3.5" />
@@ -284,109 +333,65 @@ export default function FacturacionPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-4">
-        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Pendiente de cobro</p>
-            <FileText className="h-5 w-5 text-amber-500" />
-          </div>
-          <p className="text-3xl font-bold">
-            ${summary ? summary.items_by_status.pending.reduce((s, i) => s + Number(i.amount), 0).toFixed(2) : "—"}
-          </p>
-          <p className="text-xs text-muted-foreground">{summary?.count_pending || 0} items</p>
+      {/* Total facturado */}
+      <div className="rounded-lg border border-border bg-card p-5 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">Total facturado en el período</p>
+          <TrendingUp className="h-5 w-5 text-primary" />
         </div>
-
-        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Presentado</p>
-            <CreditCard className="h-5 w-5 text-blue-500" />
-          </div>
-          <p className="text-3xl font-bold">
-            ${summary ? summary.items_by_status.submitted.reduce((s, i) => s + Number(i.amount), 0).toFixed(2) : "—"}
-          </p>
-          <p className="text-xs text-muted-foreground">{summary?.count_submitted || 0} items</p>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Cobrado</p>
-            <TrendingUp className="h-5 w-5 text-green-500" />
-          </div>
-          <p className="text-3xl font-bold">
-            ${summary ? summary.items_by_status.paid.reduce((s, i) => s + Number(i.amount), 0).toFixed(2) : "—"}
-          </p>
-          <p className="text-xs text-muted-foreground">{summary?.count_paid || 0} items</p>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Total del mes</p>
-            <TrendingUp className="h-5 w-5 text-slate-500" />
-          </div>
-          <p className="text-3xl font-bold">${summary?.total_amount.toFixed(2) || "—"}</p>
-          <p className="text-xs text-muted-foreground">{filteredItems.length} items</p>
-        </div>
+        <p className="text-3xl font-bold">
+          ${grandTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+        </p>
+        <p className="text-xs text-muted-foreground">{filteredItems.length} consultas</p>
       </div>
 
-      {/* Filters and Actions */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border bg-card p-4">
-        <div className="flex flex-wrap gap-4">
+      {/* Filters */}
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Filter className="h-4 w-4" />
+          Filtros
+        </div>
+        <div className="flex flex-wrap gap-4 items-end">
           <div className="space-y-1">
-            <Label className="text-xs">Período</Label>
+            <Label className="text-xs">Desde</Label>
             <Input
-              type="month"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-32 h-9"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-40 h-9"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Obra Social</Label>
+            <Label className="text-xs">Hasta</Label>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-40 h-9"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Prepaga</Label>
             <Select
               value={insuranceFilter}
               onChange={(e) => setInsuranceFilter(e.target.value)}
-              className="w-40 h-9"
+              className="w-48 h-9"
             >
               <option value="">Todas</option>
-              {insurances.map((ins) => (
-                <option key={ins.id} value={ins.id}>
+              {insurances.map((ins: any) => (
+                <option key={ins.id || ins.insurance_id} value={ins.id || ins.insurance_id}>
                   {ins.name}
                 </option>
               ))}
             </Select>
           </div>
+          {/* Estado removido — solo se factura */}
         </div>
-        {selectedItems.size > 0 && (
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => handleBatchStatusUpdate("submitted")}>
-              Marcar como Presentado
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => handleBatchStatusUpdate("paid")}>
-              Marcar como Cobrado
-            </Button>
-          </div>
-        )}
+
+        {/* Batch actions removidas */}
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex gap-2 border-b border-border">
-        {(["all", "pending", "submitted", "paid"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setStatusFilter(tab)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              statusFilter === tab
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab === "all" ? "Todos" : tab === "pending" ? "Pendientes" : tab === "submitted" ? "Presentados" : "Cobrados"}
-          </button>
-        ))}
-      </div>
-
-      {/* Loading State */}
+      {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -396,91 +401,111 @@ export default function FacturacionPage() {
       {/* Empty State */}
       {!loading && filteredItems.length === 0 && (
         <div className="rounded-lg border border-dashed border-border bg-card p-12 text-center">
-          <p className="text-muted-foreground">No hay ítems de facturación para este período</p>
-          <p className="text-sm text-muted-foreground mt-1">Crea tu primer item para empezar a facturar</p>
+          <Calendar className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+          <p className="text-muted-foreground">No hay ítems de facturación para este rango de fechas</p>
+          <p className="text-sm text-muted-foreground mt-1">Ajustá las fechas o creá una nueva liquidación</p>
         </div>
       )}
 
-      {/* Table */}
+      {/* Grouped Tables by Insurance */}
       {!loading && filteredItems.length > 0 && (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border bg-muted/50">
-                <tr>
-                  <th className="px-4 py-3 text-left">
-                    <Checkbox
-                      checked={selectedItems.size === filteredItems.length && filteredItems.length > 0}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedItems(new Set(filteredItems.map((i) => i.id)));
-                        } else {
-                          setSelectedItems(new Set());
-                        }
-                      }}
-                    />
-                  </th>
-                  <th className="px-4 py-3 text-left font-medium">Fecha Turno</th>
-                  <th className="px-4 py-3 text-left font-medium">Paciente</th>
-                  <th className="px-4 py-3 text-left font-medium">Obra Social</th>
-                  <th className="px-4 py-3 text-left font-medium">Práctica</th>
-                  <th className="px-4 py-3 text-left font-medium">Código</th>
-                  <th className="px-4 py-3 text-right font-medium">Monto</th>
-                  <th className="px-4 py-3 text-left font-medium">Estado</th>
-                  <th className="px-4 py-3 text-right font-medium">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((item) => (
-                  <tr key={item.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <Checkbox
-                        checked={selectedItems.has(item.id)}
-                        onCheckedChange={() => toggleItemSelection(item.id)}
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      {item.appointment?.starts_at
-                        ? format(new Date(item.appointment.starts_at), "d MMM yyyy", { locale: es })
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3">{item.patient?.full_name || "—"}</td>
-                    <td className="px-4 py-3">{item.insurance?.name || "—"}</td>
-                    <td className="px-4 py-3">{item.practice_name}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{item.practice_code}</td>
-                    <td className="px-4 py-3 text-right">${Number(item.amount).toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      <Badge
-                        className={
-                          item.status === "pending"
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                            : item.status === "submitted"
-                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                              : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                        }
-                      >
-                        {item.status === "pending" ? "Pendiente" : item.status === "submitted" ? "Presentado" : "Cobrado"}
-                      </Badge>
-                    </td>
+        <div className="space-y-6">
+          {Object.entries(itemsByInsurance).map(([key, group]) => (
+            <div key={key} className="rounded-lg border border-border overflow-hidden">
+              {/* Insurance Header */}
+              <div className="bg-muted/70 px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  <span className="font-semibold">{group.name}</span>
+                  <Badge variant="outline" className="ml-2">{group.items.length} consultas</Badge>
+                </div>
+                <span className="font-bold text-lg">
+                  Subtotal: ${group.total.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-border bg-muted/30">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left font-medium">Fecha</th>
+                      <th className="px-4 py-2.5 text-left font-medium">Paciente</th>
+                      <th className="px-4 py-2.5 text-left font-medium">DNI</th>
+                      <th className="px-4 py-2.5 text-left font-medium">Nº Afiliado</th>
+                      <th className="px-4 py-2.5 text-left font-medium">Práctica</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.items.map((item) => (
+                      <tr key={item.id} className="border-b border-border hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          {item.appointment?.starts_at
+                            ? format(new Date(item.appointment.starts_at), "dd/MM/yyyy", { locale: es })
+                            : format(new Date(item.created_at), "dd/MM/yyyy", { locale: es })}
+                        </td>
+                        <td className="px-4 py-2.5 font-medium">{item.patient?.full_name || "—"}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs">{item.patient?.dni || "—"}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs">{item.patient?.insurance_number || "—"}</td>
+                        <td className="px-4 py-2.5">{item.practice_name}</td>
+                        <td className="px-4 py-2.5 text-right font-medium">
+                          ${Number(item.amount).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          {/* Grand Total */}
+          <div className="rounded-lg border-2 border-primary bg-primary/5 p-5 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Total general</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {filteredItems.length} consultas — {Object.keys(itemsByInsurance).length} prepagas
+              </p>
+            </div>
+            <p className="text-3xl font-bold text-primary">
+              ${grandTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+            </p>
+          </div>
+
+          {/* Resumen por prepaga */}
+          {Object.keys(itemsByInsurance).length > 1 && (
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="px-4 py-3 bg-muted/50 font-semibold text-sm">Resumen por prepaga</div>
+              <table className="w-full text-sm">
+                <thead className="border-b border-border">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium">Prepaga</th>
+                    <th className="px-4 py-2.5 text-center font-medium">Consultas</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(itemsByInsurance).map(([key, group]) => (
+                    <tr key={key} className="border-b border-border">
+                      <td className="px-4 py-2.5 font-medium">{group.name}</td>
+                      <td className="px-4 py-2.5 text-center">{group.items.length}</td>
+                      <td className="px-4 py-2.5 text-right font-bold">
+                        ${group.total.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-muted/30 font-bold">
+                    <td className="px-4 py-3">TOTAL</td>
+                    <td className="px-4 py-3 text-center">{filteredItems.length}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {item.status === "pending" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteItem(item.id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
+                      ${grandTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -498,7 +523,7 @@ export default function FacturacionPage() {
                 onChange={(e) => setCreateForm((f) => ({ ...f, appointment_id: e.target.value }))}
               >
                 <option value="">Selecciona un turno</option>
-                {appointments.map((apt) => (
+                {appointments.map((apt: any) => (
                   <option key={apt.id} value={apt.id}>
                     {apt.patient?.full_name} - {format(new Date(apt.starts_at), "d MMM yyyy HH:mm", { locale: es })}
                   </option>
@@ -506,14 +531,14 @@ export default function FacturacionPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Obra Social</Label>
+              <Label>Prepaga</Label>
               <Select
                 value={createForm.insurance_id}
                 onChange={(e) => setCreateForm((f) => ({ ...f, insurance_id: e.target.value }))}
               >
-                <option value="">Selecciona una obra social</option>
-                {insurances.map((ins) => (
-                  <option key={ins.id} value={ins.id}>
+                <option value="">Selecciona una prepaga</option>
+                {insurances.map((ins: any) => (
+                  <option key={ins.id || ins.insurance_id} value={ins.id || ins.insurance_id}>
                     {ins.name}
                   </option>
                 ))}

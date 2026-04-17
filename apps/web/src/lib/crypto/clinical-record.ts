@@ -6,6 +6,14 @@ const ALGORITHM = "AES-GCM";
 const KEY_LENGTH = 256;
 const IV_LENGTH = 12; // bytes — recomendado para GCM
 
+// Patrones de claves inseguras que NO deben usarse en producción
+const INSECURE_KEY_PATTERNS = [
+  /^0+$/,           // todos ceros
+  /^f+$/i,          // todos F
+  /^(01)+$/,        // alternante
+  /^(0123456789ab)+/i, // secuencial
+];
+
 // Importa la clave maestra desde la variable de entorno (hex de 64 chars = 32 bytes)
 async function getMasterKey(): Promise<CryptoKey> {
   const hexKey = process.env["CLINICAL_RECORD_ENCRYPTION_KEY"];
@@ -14,6 +22,16 @@ async function getMasterKey(): Promise<CryptoKey> {
     throw new Error(
       "CLINICAL_RECORD_ENCRYPTION_KEY inválida: debe ser un hex de 64 caracteres (32 bytes)"
     );
+  }
+
+  // SEGURIDAD: rechazar claves placeholder/inseguras en producción
+  if (process.env.NODE_ENV === "production") {
+    if (INSECURE_KEY_PATTERNS.some((p) => p.test(hexKey))) {
+      throw new Error(
+        "CLINICAL_RECORD_ENCRYPTION_KEY es insegura. " +
+        "Generá una clave real con: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+      );
+    }
   }
 
   const keyBytes = Buffer.from(hexKey, "hex");

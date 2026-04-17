@@ -18,6 +18,7 @@ export interface AppointmentEmailData {
   startsAt: Date;
   serviceName?: string;
   bookingUrl?: string;
+  meetUrl?: string | null;
 }
 
 // Envía confirmación inmediata al paciente tras reservar
@@ -49,6 +50,22 @@ export async function sendReminderEmail(data: AppointmentEmailData) {
     to: data.to,
     subject: `Recordatorio: turno mañana con ${data.professionalName}`,
     html: buildReminderHtml({ ...data, dateStr }),
+  });
+}
+
+// Aviso ~5 min antes de que arranque la videoconsulta. Requiere meetUrl.
+export async function sendVirtualReminderEmail(data: AppointmentEmailData) {
+  const timeStr = data.startsAt.toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+
+  return getResend().emails.send({
+    from: FROM,
+    to: data.to,
+    subject: `Tu videoconsulta con ${data.professionalName} empieza en unos minutos`,
+    html: buildVirtualReminderHtml({ ...data, timeStr }),
   });
 }
 
@@ -141,7 +158,24 @@ function buildConfirmationHtml(
       <div style="background: #f1f5f9; padding: 16px; border-radius: 8px; margin: 24px 0;">
         <p style="margin: 0;"><strong>Fecha y hora:</strong> ${data.dateStr}</p>
         ${data.serviceName ? `<p style="margin: 8px 0 0;"><strong>Servicio:</strong> ${data.serviceName}</p>` : ""}
+        ${data.meetUrl ? `<p style="margin: 8px 0 0;"><strong>Modalidad:</strong> Videoconsulta online</p>` : ""}
       </div>
+      ${
+        data.meetUrl
+          ? `
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${data.meetUrl}"
+             style="display: inline-block; background: #2563eb; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            Entrar a la videoconsulta
+          </a>
+          <p style="margin: 12px 0 0; font-size: 12px; color: #64748b;">
+            Entrá a la sala unos minutos antes del horario del turno.<br/>
+            No necesitás instalar nada: se abre directamente en el navegador.
+          </p>
+        </div>
+      `
+          : ""
+      }
       ${data.bookingUrl ? `<p><a href="${data.bookingUrl}" style="color: #0ea5e9;">Ver o cancelar mi turno</a></p>` : ""}
       <p style="color: #64748b; font-size: 14px;">BookMe — bookme.ar</p>
     </div>
@@ -157,8 +191,52 @@ function buildReminderHtml(data: AppointmentEmailData & { dateStr: string }) {
       <div style="background: #f1f5f9; padding: 16px; border-radius: 8px; margin: 24px 0;">
         <p style="margin: 0;"><strong>Fecha y hora:</strong> ${data.dateStr}</p>
         ${data.serviceName ? `<p style="margin: 8px 0 0;"><strong>Servicio:</strong> ${data.serviceName}</p>` : ""}
+        ${data.meetUrl ? `<p style="margin: 8px 0 0;"><strong>Modalidad:</strong> Videoconsulta online</p>` : ""}
       </div>
+      ${
+        data.meetUrl
+          ? `
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${data.meetUrl}"
+             style="display: inline-block; background: #2563eb; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            Entrar a la videoconsulta
+          </a>
+          <p style="margin: 12px 0 0; font-size: 12px; color: #64748b;">
+            Guardá este link — lo vas a necesitar mañana a la hora del turno.
+          </p>
+        </div>
+      `
+          : ""
+      }
       ${data.bookingUrl ? `<p><a href="${data.bookingUrl}" style="color: #0ea5e9;">Ver o cancelar mi turno</a></p>` : ""}
+      <p style="color: #64748b; font-size: 14px;">BookMe — bookme.ar</p>
+    </div>
+  `;
+}
+
+function buildVirtualReminderHtml(
+  data: AppointmentEmailData & { timeStr: string }
+) {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #0f172a;">Tu videoconsulta empieza en unos minutos</h2>
+      <p>Hola <strong>${data.patientName}</strong>,</p>
+      <p>Te recordamos que a las <strong>${data.timeStr}</strong> tenés tu videoconsulta con <strong>${data.professionalName}</strong>.</p>
+      ${
+        data.meetUrl
+          ? `
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${data.meetUrl}"
+             style="display: inline-block; background: #2563eb; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+            Entrar ahora a la videoconsulta
+          </a>
+          <p style="margin: 12px 0 0; font-size: 12px; color: #64748b;">
+            Se abre en el navegador. No necesitás instalar nada.
+          </p>
+        </div>
+      `
+          : ""
+      }
       <p style="color: #64748b; font-size: 14px;">BookMe — bookme.ar</p>
     </div>
   `;

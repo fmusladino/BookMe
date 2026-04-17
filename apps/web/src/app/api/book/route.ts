@@ -4,6 +4,7 @@ import type { AppointmentStatus } from "@/types";
 import { z } from "zod";
 import { validateAppointmentSlot } from "@/lib/schedule/validation";
 import { sendBookingConfirmation, sendPushToProNewBooking, getNotificationContext } from "@/lib/notifications/send";
+import { checkRateLimit, getClientIp } from "@/lib/security";
 
 // Validar que sea un string parseable como fecha ISO 8601 (con o sin offset)
 const isoDateString = z.string().refine(
@@ -18,43 +19,51 @@ const bookAppointmentSchema = z.object({
   starts_at: isoDateString,
   ends_at: isoDateString,
   notes: z.string().max(500, "Notas no pueden exceder 500 caracteres").optional(),
+  modality: z.enum(["presencial", "virtual"]).optional().default("presencial"),
 });
+
+const isDev = process.env.NODE_ENV !== "production";
 
 // POST /api/book — Reservar turno como paciente autenticado
 export async function POST(request: NextRequest) {
   try {
-    console.log("[BOOK] ─── Inicio de reserva ───");
+    // Rate limiting: máx 10 reservas por minuto por IP
+    const ip = getClientIp(request);
+    const rateLimitError = checkRateLimit(`book:${ip}`, 10, 60_000);
+    if (rateLimitError) return rateLimitError;
+
+    if (isDev) console.log("[BOOK] ─── Inicio de reserva ───");
     const supabase = await createClient();
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser();
 
-    console.log("[BOOK] Auth:", user ? `OK (${user.id})` : "FAIL", authError?.message || "");
+    if (isDev) console.log("[BOOK] Auth:", user ? "OK" : "FAIL", authError?.message || "");
 
     if (authError || !user) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
     const body = (await request.json()) as unknown;
-    console.log("[BOOK] Body recibido:", JSON.stringify(body));
+    if (isDev) console.log("[BOOK] Body recibido");
     const parsed = bookAppointmentSchema.safeParse(body);
 
     if (!parsed.success) {
-      console.log("[BOOK] Validación fallida:", JSON.stringify(parsed.error.flatten()));
+      if (isDev) console.log("[BOOK] Validación fallida:", JSON.stringify(parsed.error.flatten()));
       return NextResponse.json(
         { error: "Datos inválidos", details: parsed.error.flatten() },
         { status: 400 }
       );
     }
 
-    const { professional_id, service_id, starts_at, ends_at, notes } = parsed.data;
-    console.log("[BOOK] Datos válidos:", { professional_id, service_id, starts_at, ends_at });
+    const { professional_id, service_id, starts_at, ends_at, notes, modality } = parsed.data;
+    if (isDev) console.log("[BOOK] Datos válidos:", { starts_at, ends_at });
 
     // Admin client para operaciones que necesitan bypassear RLS
     // (el paciente autenticado no tiene permisos de INSERT en patients ni appointments)
     const adminClient = createAdminClient();
-    console.log("[BOOK] Admin client creado OK");
+    if (isDev) console.log("[BOOK] Admin client creado OK");
 
     // Verificar que el usuario tiene rol de paciente
     const { data: userProfile, error: profileError } = await adminClient
@@ -63,7 +72,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    console.log("[BOOK] Profile result:", userProfile ? `OK (${userProfile.role})` : "NULL", profileError?.message || "");
+    if (isDev) console.log("[BOOK] Profile result:", userProfile ? "OK" : "NULL");
 
     if (profileError || !userProfile) {
       console.error("[BOOK] ERROR profile:", profileError);
@@ -84,7 +93,7 @@ export async function POST(request: NextRequest) {
       .eq("id", professional_id)
       .single();
 
-    console.log("[BOOK] Professional result:", professional ? `OK (${professional.subscription_status})` : "NULL", proError?.message || "");
+    if (isDev) console.log("[BOOK] Professional result:", professional ? "OK" : "NULL", proError?.message || "");
 
     if (proError || !professional) {
       console.error("[BOOK] ERROR professional:", proError);
@@ -109,7 +118,7 @@ export async function POST(request: NextRequest) {
       .eq("profile_id", user.id)
       .maybeSingle();
 
-    console.log("[BOOK] Patient by profile_id:", byProfile ? `FOUND (${byProfile.id})` : "NOT FOUND");
+    if (isDev) console.log("[BOOK] Patient by profile_id:", byProfile ? "FOUND" : "NOT FOUND");
 
     if (byProfile) {
       existingPatient = byProfile;
@@ -154,7 +163,7 @@ export async function POST(request: NextRequest) {
         .select("id")
         .single();
 
-      console.log("[BOOK] Create patient result:", newPatient ? `OK (${newPatient.id})` : "NULL", createPatientError?.message || "");
+      if (isDev) console.log("[BOOK] Create patient result:", newPatient ? "OK" : "NULL", createPatientError?.message || "");
 
       if (createPatientError || !newPatient) {
         console.error("[BOOK] ERROR creating patient:", createPatientError);
@@ -172,10 +181,11 @@ export async function POST(request: NextRequest) {
       adminClient,
       professional_id,
       starts_at,
-      ends_at
+      ends_at,
+      modality
     );
 
-    console.log("[BOOK] Slot validation:", validationResult.valid ? "VALID" : `INVALID: ${validationResult.error}`);
+    if (isDev) console.log("[BOOK] Slot validation:", validationResult.valid ? "VALID" : "INVALID");
 
     if (!validationResult.valid) {
       return NextResponse.json(
@@ -209,7 +219,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Crear el turno con estado "pending" (requiere confirmación del profesional)
+    // Si el paciente eligió modalidad virtual, generamos un link de Jitsi único
+    // y lo guardamos en el turno. El link sirve tanto si el turno es hoy como en dos semanas:
+    // la sala de Jitsi existe recién cuando alguien entra.
+    const meetUrl =
+      modality === "virtual"
+        ? `https://meet.jit.si/bookme-${(typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : Math.random().toString(36).slice(2) + Date.now().toString(36)
+          )
+            .replace(/-/g, "")
+            .slice(0, 16)}`
+        : null;
+
+    // Crear el turno con estado "confirmed" — las reservas online quedan confirmadas
+    // automáticamente y llegan listas tanto al paciente como al profesional.
     const { data: appointment, error: createError } = await adminClient
       .from("appointments")
       .insert({
@@ -220,12 +244,14 @@ export async function POST(request: NextRequest) {
         ends_at,
         notes: notes || null,
         booked_by: user.id,
-        status: "pending" as AppointmentStatus,
+        status: "confirmed" as AppointmentStatus,
+        modality,
+        meet_url: meetUrl,
       })
       .select()
       .single();
 
-    console.log("[BOOK] Create appointment result:", appointment ? `OK (${appointment.id})` : "NULL", createError?.message || "");
+    if (isDev) console.log("[BOOK] Create appointment result:", appointment ? "OK" : "NULL", createError?.message || "");
 
     if (createError) {
       console.error("[BOOK] ERROR creating appointment:", createError);
@@ -247,7 +273,7 @@ export async function POST(request: NextRequest) {
       new Date(starts_at)
     );
 
-    console.log("[BOOK] ─── Reserva exitosa ───", appointment.id);
+    if (isDev) console.log("[BOOK] ─── Reserva exitosa ───");
     return NextResponse.json({ appointment }, { status: 201 });
   } catch (error) {
     console.error("[BOOK] ERROR CATCH:", error);

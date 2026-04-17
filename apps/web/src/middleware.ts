@@ -23,6 +23,7 @@ const PUBLIC_ROUTES = [
   "/api/webhooks",
   "/api/cron",
   "/api/professionals", // directorio público y perfiles
+  "/api/directory",     // filtros públicos del directorio (obras sociales, localidades)
   "/api/book",          // reserva (auth se verifica internamente)
   "/api/schedule/available-slots", // slots públicos para booking
   "/api/auth/register",           // registro de pacientes
@@ -78,9 +79,21 @@ export async function middleware(request: NextRequest) {
 
   // Leer el rol desde los metadatos del JWT (app_metadata) en vez de consultar la DB.
   // El rol se setea en app_metadata al registrarse o desde el trigger de profiles.
-  // Fallback: si no existe en metadata, usar "professional" por defecto.
-  const role = (user.app_metadata?.role as string) ?? "professional";
-  const home = ROLE_HOME[role] ?? "/dashboard";
+  // SEGURIDAD: si no existe rol en metadata, NO asumir "professional".
+  // Redirigir a login para que el sistema asigne el rol correctamente.
+  const role = user.app_metadata?.role as string | undefined;
+  if (!role || !ROLE_HOME[role]) {
+    // Rol no asignado o inválido — redirigir a login para re-autenticar
+    // Esto previene escalación de privilegios por metadata faltante
+    if (!isPublicRoute(pathname) && pathname !== "/login") {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("redirectTo", pathname);
+      loginUrl.searchParams.set("reason", "missing_role");
+      return NextResponse.redirect(loginUrl);
+    }
+    return response;
+  }
+  const home = ROLE_HOME[role];
 
   // Con sesión en home o ruta de auth → redirigir al panel según rol
   if (pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/register")) {

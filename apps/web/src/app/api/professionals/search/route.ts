@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
     const city = searchParams.get("city")?.trim() || "";
     const specialty = searchParams.get("specialty")?.trim() || "";
     const line = searchParams.get("line") as "healthcare" | "business" | null;
+    const province = searchParams.get("province")?.trim() || "";
+    const insuranceId = searchParams.get("insurance")?.trim() || "";
     const pageStr = searchParams.get("page") || "1";
     const limitStr = searchParams.get("limit") || "12";
 
@@ -43,6 +45,10 @@ export async function GET(request: NextRequest) {
       query = query.ilike("city", `%${city}%`);
     }
 
+    if (province) {
+      query = query.ilike("province", `%${province}%`);
+    }
+
     if (specialty) {
       query = query.eq("specialty_slug", specialty);
     }
@@ -56,6 +62,65 @@ export async function GET(request: NextRequest) {
       query = query.or(
         `specialty.ilike.${searchTerm},bio.ilike.${searchTerm},city.ilike.${searchTerm}`
       );
+    }
+
+    // Si se filtra por obra social, primero obtener los IDs de profesionales que la aceptan
+    let insuranceFilterIds: string[] | null = null;
+    if (insuranceId) {
+      const proIdsFromInsurance = new Set<string>();
+
+      // Buscar en professional_insurances
+      try {
+        const { data: piData } = await admin
+          .from("professional_insurances")
+          .select("professional_id")
+          .eq("insurance_id", insuranceId)
+          .eq("is_active", true);
+        if (piData) {
+          for (const row of piData) proIdsFromInsurance.add(row.professional_id);
+        }
+      } catch { /* tabla puede no existir */ }
+
+      // Buscar en prestaciones
+      try {
+        const { data: prestData } = await admin
+          .from("prestaciones")
+          .select("professional_id")
+          .eq("insurance_id", insuranceId)
+          .eq("is_active", true);
+        if (prestData) {
+          for (const row of prestData) proIdsFromInsurance.add(row.professional_id);
+        }
+      } catch { /* tabla puede no existir */ }
+
+      // Buscar en service_insurances → services → professional_id
+      try {
+        const { data: siData } = await admin
+          .from("service_insurances")
+          .select("service_id, service:services(professional_id)")
+          .eq("insurance_id", insuranceId);
+        if (siData) {
+          for (const row of siData) {
+            const svc = row.service as unknown as { professional_id: string } | null;
+            if (svc) proIdsFromInsurance.add(svc.professional_id);
+          }
+        }
+      } catch { /* tabla puede no existir */ }
+
+      insuranceFilterIds = Array.from(proIdsFromInsurance);
+
+      // Si no hay ningún profesional con esa OS, devolver vacío directamente
+      if (insuranceFilterIds.length === 0) {
+        return NextResponse.json({
+          professionals: [],
+          total: 0,
+          page,
+          totalPages: 0,
+          pages: 0,
+        });
+      }
+
+      query = query.in("id", insuranceFilterIds);
     }
 
     query = query.order("created_at", { ascending: false });

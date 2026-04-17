@@ -52,6 +52,13 @@ export function OnboardingProvider() {
     checkOnboarding();
   }, [user, userLoading]);
 
+  // Permite volver a disparar el tour desde otros componentes (ej. botón en sidebar)
+  useEffect(() => {
+    const handleRestart = () => setPhase("tour");
+    window.addEventListener("bookme:restart-tour", handleRestart);
+    return () => window.removeEventListener("bookme:restart-tour", handleRestart);
+  }, []);
+
   // Marcar como completado en la DB
   const markComplete = useCallback(async () => {
     setPhase("done");

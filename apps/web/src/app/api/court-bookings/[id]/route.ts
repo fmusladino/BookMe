@@ -18,7 +18,7 @@ export async function PATCH(
       console.log("[PATCH court-booking] no user");
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
-    console.log("[PATCH court-booking] user:", user.id);
+    if (process.env.NODE_ENV !== "production") console.log("[PATCH court-booking] user authenticated");
 
     const body = await request.json();
     console.log("[PATCH court-booking] body:", JSON.stringify(body));

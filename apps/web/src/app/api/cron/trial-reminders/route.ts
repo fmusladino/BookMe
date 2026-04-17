@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { verifyCronAuth } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +18,8 @@ export const dynamic = "force-dynamic";
  * Por ahora loguea y retorna los profesionales afectados.
  */
 export async function GET(request: NextRequest) {
-  // Validar secret del cron
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env["CRON_SECRET"];
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const authError = verifyCronAuth(request);
+  if (authError) return authError;
   }
 
   try {

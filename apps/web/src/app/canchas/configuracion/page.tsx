@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useSession } from "@/hooks/use-session";
+import { AvatarUpload } from "@/components/avatar-upload";
 
 interface CourtOwnerProfile {
   business_name: string;
@@ -22,6 +23,7 @@ interface CourtOwnerProfile {
   phone?: string;
   whatsapp?: string;
   is_visible: boolean;
+  avatar_url?: string | null;
 }
 
 export default function CanchasConfiguracionPage() {
@@ -117,6 +119,24 @@ export default function CanchasConfiguracionPage() {
           Datos de tu complejo deportivo, visibilidad y link de reservas.
         </p>
       </div>
+
+      {/* Foto de perfil */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Foto del complejo</CardTitle>
+          <CardDescription>
+            Esta imagen se muestra en tu página pública y en los resultados de búsqueda.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AvatarUpload
+            currentUrl={profile.avatar_url ?? null}
+            fallbackName={profile.business_name}
+            table="court_owners"
+            onAvatarChange={(url) => setProfile((p) => ({ ...p, avatar_url: url }))}
+          />
+        </CardContent>
+      </Card>
 
       {/* Link público */}
       {publicLink && (
