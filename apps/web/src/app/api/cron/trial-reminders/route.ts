@@ -20,7 +20,6 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const authError = verifyCronAuth(request);
   if (authError) return authError;
-  }
 
   try {
     const admin = createAdminClient();
