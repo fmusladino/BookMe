@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determinar la extensión del archivo
-    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-    const filePath = `${user.id}/avatar.${ext}`;
+    // Reusar la extensión validada arriba (sin el punto inicial)
+    const fileExt = ext.replace(/^\./, "") || "jpg";
+    const filePath = `${user.id}/avatar.${fileExt}`;
 
     // Subir a Supabase Storage (upsert: reemplaza si ya existe)
     const { error: uploadError } = await supabase.storage
