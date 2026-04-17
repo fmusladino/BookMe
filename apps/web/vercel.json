@@ -5,10 +5,6 @@
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/cron/virtual-reminders",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/cron/trial-emails",
       "schedule": "0 12 * * *"
     },
