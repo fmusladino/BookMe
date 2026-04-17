@@ -12,7 +12,7 @@ import { Clock, User, Phone, Video, MapPin, AlertCircle, XCircle } from "lucide-
 // Constantes de grilla
 const HOUR_START = 7;
 const HOUR_END = 22;
-const SLOT_HEIGHT = 60; // px por hora
+const SLOT_HEIGHT = 80; // px por hora — balance entre densidad y legibilidad
 const TOTAL_HOURS = HOUR_END - HOUR_START;
 
 // ─── Estilos de turno por estado ─── inspirados en HisMe
@@ -259,7 +259,7 @@ export const WeekView = memo(function WeekView({
             {hours.map((hour) => (
               <div
                 key={hour}
-                className="flex h-[60px] items-start justify-end border-b pr-2 pt-0.5"
+                className="flex h-[80px] items-start justify-end border-b pr-2 pt-0.5"
               >
                 <span className="text-xs font-medium text-muted-foreground">
                   {hour.toString().padStart(2, "0")}:00
@@ -290,7 +290,7 @@ export const WeekView = memo(function WeekView({
                     <div
                       key={hour}
                       className={cn(
-                        "h-[60px] border-b transition-colors cursor-pointer group relative",
+                        "h-[80px] border-b transition-colors cursor-pointer group relative",
                         isAvailable
                           ? "bg-emerald-50/80 border-emerald-200/40 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800/30 dark:hover:bg-emerald-900/40"
                           : isUnavailable
@@ -349,7 +349,7 @@ export const WeekView = memo(function WeekView({
                   );
                 })}
 
-                {/* ─── Turnos — Cards estilo HisMe ─── */}
+                {/* ─── Turnos — distribuidos en columnas cuando se solapan ─── */}
                 {dayAppointments.map((apt) => {
                   const top = getTopOffset(apt.starts_at);
                   const height = getHeight(apt.starts_at, apt.ends_at);
@@ -357,10 +357,27 @@ export const WeekView = memo(function WeekView({
                   const isCancelled = apt.status === "cancelled";
                   const isNoShow = apt.status === "no_show";
                   const isCompleted = apt.status === "completed";
-                  // Próximo si falta <30 min y aún no terminó
                   const minutesUntilStart = (parseISO(apt.starts_at).getTime() - Date.now()) / 60000;
                   const isSoon = !isCancelled && !isCompleted && !isNoShow && minutesUntilStart > -5 && minutesUntilStart < 30;
                   const hasMeet = apt.modality === "virtual" && apt.meet_url;
+                  // Layout: los turnos que solapan temporalmente se distribuyen
+                  // lado a lado (columnas) en vez de apilarse invisiblemente.
+                  const aStart = parseISO(apt.starts_at).getTime();
+                  const aEnd = parseISO(apt.ends_at).getTime();
+                  const overlapping = [...dayAppointments]
+                    .filter((o) => {
+                      const oStart = parseISO(o.starts_at).getTime();
+                      const oEnd = parseISO(o.ends_at).getTime();
+                      return oStart < aEnd && oEnd > aStart;
+                    })
+                    .sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id.localeCompare(b.id));
+                  const col = overlapping.findIndex((o) => o.id === apt.id);
+                  const cols = overlapping.length;
+                  const widthPct = 100 / cols;
+                  const leftPct = col * widthPct;
+
+                  // Layout compacto (horizontal) si la card es chica (<36px).
+                  const isCompact = Math.max(height, 40) < 36;
 
                   return (
                     <div
@@ -372,27 +389,31 @@ export const WeekView = memo(function WeekView({
                         onAppointmentClick(apt);
                       }}
                       className={cn(
-                        "absolute left-1 right-1 z-20 cursor-grab overflow-hidden rounded-md shadow-sm active:cursor-grabbing hover:shadow-md transition-all",
+                        "absolute z-20 cursor-grab overflow-hidden rounded-md border-l-4 shadow-sm active:cursor-grabbing hover:shadow-md hover:z-30 transition-all",
                         style.card,
                         style.border,
                         isCancelled && "opacity-60 cursor-pointer",
                         isSoon && "ring-2 ring-blue-500"
                       )}
                       style={{
-                        top: `${top}px`,
-                        height: `${Math.max(height, 28)}px`,
+                        top: `${top + 1}px`,
+                        height: `${Math.max(height, 32) - 2}px`,
+                        left: `calc(${leftPct}% + 2px)`,
+                        width: `calc(${widthPct}% - 4px)`,
                       }}
                     >
-                      <div className="px-2 py-1 h-full flex flex-col justify-between">
-                        {/* Fila superior: Nombre del paciente */}
-                        <div className="flex items-start justify-between gap-1">
+                      {isCompact ? (
+                        // Card compacta: una sola fila horizontal con todo
+                        <div className="flex items-center gap-1.5 px-2 h-full">
+                          <span className="text-[10px] font-mono font-bold text-foreground/70 shrink-0">
+                            {format(parseISO(apt.starts_at), "HH:mm")}
+                          </span>
                           <p className={cn(
-                            "text-xs font-semibold truncate leading-tight text-foreground",
+                            "text-xs font-semibold truncate flex-1 text-foreground",
                             isCancelled && "line-through opacity-70"
                           )}>
                             {apt.patient.full_name}
                           </p>
-                          {/* Icono de modalidad — clickeable si es virtual con link */}
                           {hasMeet ? (
                             <a
                               href={apt.meet_url ?? "#"}
@@ -400,36 +421,56 @@ export const WeekView = memo(function WeekView({
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
                               title="Entrar a la videoconsulta"
-                              className="flex-shrink-0 rounded hover:bg-blue-500/20 p-0.5 -m-0.5 transition-colors"
+                              className="shrink-0 rounded hover:bg-blue-500/20 p-0.5 transition-colors"
                             >
                               <Video className="h-3 w-3 text-blue-500" />
                             </a>
                           ) : apt.modality === "virtual" ? (
-                            <Video className="h-3 w-3 flex-shrink-0 text-blue-500 mt-0.5" />
+                            <Video className="h-3 w-3 shrink-0 text-blue-500" />
+                          ) : null}
+                        </div>
+                      ) : (
+                      <div className="px-2 py-1.5 h-full flex flex-col gap-0.5">
+                        {/* Header: hora y modalidad */}
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-[10px] font-mono font-bold text-foreground/70">
+                            {format(parseISO(apt.starts_at), "HH:mm")}–{format(parseISO(apt.ends_at), "HH:mm")}
+                          </span>
+                          {hasMeet ? (
+                            <a
+                              href={apt.meet_url ?? "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              title="Entrar a la videoconsulta"
+                              className="shrink-0 rounded hover:bg-blue-500/20 p-0.5 -m-0.5 transition-colors"
+                            >
+                              <Video className="h-3.5 w-3.5 text-blue-500" />
+                            </a>
+                          ) : apt.modality === "virtual" ? (
+                            <Video className="h-3.5 w-3.5 shrink-0 text-blue-500" />
                           ) : (
-                            <MapPin className="h-3 w-3 flex-shrink-0 text-muted-foreground/50 mt-0.5" />
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
                           )}
                         </div>
 
-                        {/* Fila media: Horario y servicio */}
-                        {height >= 38 && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <Clock className="h-2.5 w-2.5 flex-shrink-0 text-muted-foreground/70" />
-                            <span className="text-[10px] text-muted-foreground font-medium">
-                              {format(parseISO(apt.starts_at), "HH:mm")} - {format(parseISO(apt.ends_at), "HH:mm")}
-                            </span>
-                          </div>
-                        )}
+                        {/* Nombre */}
+                        <p className={cn(
+                          "text-sm font-semibold truncate leading-tight text-foreground",
+                          isCancelled && "line-through opacity-70"
+                        )}>
+                          {apt.patient.full_name}
+                        </p>
 
                         {/* Servicio */}
-                        {height >= 52 && apt.service && (
-                          <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">
+                        {height >= 56 && apt.service && (
+                          <p className="text-[11px] text-muted-foreground/80 truncate">
                             {apt.service.name}
                           </p>
                         )}
 
                         {/* Badge de estado — solo para estados especiales */}
-                        {height >= 48 && (isNoShow || isCancelled) && (
+                        {height >= 56 && (isNoShow || isCancelled) && (
                           <div className="mt-auto pt-0.5">
                             <span className={cn(
                               "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold",
@@ -442,13 +483,14 @@ export const WeekView = memo(function WeekView({
                         )}
 
                         {/* Teléfono — solo si hay mucho espacio */}
-                        {height >= 70 && apt.patient.phone && (
+                        {height >= 90 && apt.patient.phone && (
                           <div className="flex items-center gap-1 mt-0.5">
                             <Phone className="h-2.5 w-2.5 flex-shrink-0 text-muted-foreground/50" />
                             <span className="text-[9px] text-muted-foreground/70">{apt.patient.phone}</span>
                           </div>
                         )}
                       </div>
+                      )}
                     </div>
                   );
                 })}
