@@ -76,6 +76,12 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
+  // Datos del guest (reserva sin registro). Solo se usan si isLoggedIn = false.
+  const [guestFullName, setGuestFullName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestDni, setGuestDni] = useState('');
+
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -164,11 +170,21 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   const handleConfirmBooking = async () => {
     if (!selectedService || !selectedDate || !selectedTime || !professional) return;
 
+    // Si no está logueado, validar datos de guest antes de enviar.
+    // Ya no forzamos registro — fricción cero para pacientes nuevos.
     if (!isLoggedIn) {
-      // Redirect to login with return parameters
-      const redirectUrl = `/book/${slug}?serviceId=${selectedService.id}&date=${format(selectedDate, 'yyyy-MM-dd')}&time=${selectedTime}`;
-      router.push(`/login?redirectTo=${encodeURIComponent(redirectUrl)}`);
-      return;
+      if (!guestFullName.trim() || guestFullName.trim().length < 3) {
+        sonnerToast.error('Ingresá tu nombre completo');
+        return;
+      }
+      if (!guestEmail.trim() || !/^\S+@\S+\.\S+$/.test(guestEmail)) {
+        sonnerToast.error('Ingresá un email válido');
+        return;
+      }
+      if (!guestPhone.trim() || guestPhone.trim().length < 6) {
+        sonnerToast.error('Ingresá un teléfono válido');
+        return;
+      }
     }
 
     try {
@@ -189,6 +205,19 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
       const startsAtISO = `${dateStr}T${startTimeStr}:00-03:00`;
       const endsAtISO = `${dateStr}T${endTimeStr}:00-03:00`;
 
+      // Si no hay sesión, enviamos los datos del guest para que el backend
+      // cree paciente sin vincular a un usuario de auth.
+      const guestPayload = !isLoggedIn
+        ? {
+            guest: {
+              full_name: guestFullName.trim(),
+              email: guestEmail.trim().toLowerCase(),
+              phone: guestPhone.trim(),
+              dni: guestDni.trim() || undefined,
+            },
+          }
+        : {};
+
       const response = await fetch('/api/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -199,6 +228,7 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
           ends_at: endsAtISO,
           notes: '',
           modality: selectedModality,
+          ...guestPayload,
         }),
       });
 
@@ -592,31 +622,93 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
         })()}
       </div>
 
-      {isLoggedIn ? (
-        <Button
-          onClick={handleConfirmBooking}
-          disabled={confirming}
-          className="w-full bg-bookme-navy dark:bg-bookme-mint"
-          size="lg"
-        >
-          {confirming ? (
-            <>
-              <Loader2 size={16} className="animate-spin mr-2" />
-              Confirmando...
-            </>
-          ) : (
-            'Confirmar reserva'
-          )}
-        </Button>
-      ) : (
-        <Button
-          onClick={handleConfirmBooking}
-          className="w-full bg-bookme-navy dark:bg-bookme-mint"
-          size="lg"
-        >
-          Iniciá sesión para reservar
-        </Button>
+      {/* Formulario guest: visible solo si NO hay sesión. Sin fricción de registro. */}
+      {!isLoggedIn && (
+        <div className="space-y-3 rounded-xl border border-muted bg-muted/20 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Tus datos de contacto</p>
+              <p className="text-xs text-muted-foreground">
+                No hace falta crear cuenta. ¿Ya tenés una?{' '}
+                <Link
+                  href={`/login?redirectTo=${encodeURIComponent(
+                    `/book/${slug}?serviceId=${selectedService?.id}&date=${selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''}&time=${selectedTime || ''}`
+                  )}`}
+                  className="text-bookme-navy dark:text-bookme-mint underline"
+                >
+                  Iniciá sesión
+                </Link>
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Nombre y apellido *</label>
+              <input
+                type="text"
+                value={guestFullName}
+                onChange={(e) => setGuestFullName(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                placeholder="Juan Pérez"
+                autoComplete="name"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Email *</label>
+              <input
+                type="email"
+                value={guestEmail}
+                onChange={(e) => setGuestEmail(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                placeholder="tu@email.com"
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Teléfono *</label>
+              <input
+                type="tel"
+                value={guestPhone}
+                onChange={(e) => setGuestPhone(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                placeholder="+54 9 11 1234-5678"
+                autoComplete="tel"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">DNI (opcional)</label>
+              <input
+                type="text"
+                value={guestDni}
+                onChange={(e) => setGuestDni(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm"
+                placeholder="12345678"
+                inputMode="numeric"
+              />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Te vamos a mandar la confirmación por email y WhatsApp. Al reservar aceptás los{' '}
+            <Link href="/terminos" className="underline">términos y condiciones</Link>.
+          </p>
+        </div>
       )}
+
+      <Button
+        onClick={handleConfirmBooking}
+        disabled={confirming}
+        className="w-full bg-bookme-navy dark:bg-bookme-mint"
+        size="lg"
+      >
+        {confirming ? (
+          <>
+            <Loader2 size={16} className="animate-spin mr-2" />
+            Confirmando...
+          </>
+        ) : (
+          'Confirmar reserva'
+        )}
+      </Button>
     </div>
   );
 

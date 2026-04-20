@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { parseIntent } from "@/lib/mia/intents";
 import {
   handleQueryToday,
@@ -16,6 +16,11 @@ import {
 } from "@/lib/mia/actions";
 import { executeConfirmedAction } from "@/lib/mia/executor";
 import { hasFeatureAsync } from "@/lib/subscriptions/feature-flags";
+import {
+  getOnboardingWelcome,
+  processOnboardingStep,
+  type OnboardingState,
+} from "@/lib/mia/onboarding";
 
 export const dynamic = "force-dynamic";
 
@@ -85,11 +90,13 @@ export async function POST(request: NextRequest) {
       context?: {
         pendingAction?: string;
         pendingData?: Record<string, unknown>;
+        onboardingState?: OnboardingState;
+        startOnboarding?: boolean;
       };
     };
     const { message, context } = body;
 
-    if (!message || typeof message !== "string") {
+    if (!message || typeof message !== "string" && !context?.startOnboarding) {
       return NextResponse.json(
         { error: "Mensaje inválido" },
         { status: 400 }
@@ -98,6 +105,38 @@ export async function POST(request: NextRequest) {
 
     const userFullName = profileData?.full_name ?? "Profesional";
     let response;
+
+    // ─── MODO ONBOARDING ────────────────────────────────────
+    // Si el profesional aún no completó el onboarding, MIA lo guía paso a paso.
+    // Se dispara: (a) cuando el cliente manda startOnboarding=true, o (b) cuando ya hay un onboardingState en curso.
+    const needsOnboarding = !professional.onboarding_completed;
+
+    if (needsOnboarding && context?.startOnboarding && !context.onboardingState) {
+      const welcome = getOnboardingWelcome(userFullName);
+      return NextResponse.json({
+        response: welcome.message,
+        action: "onboarding",
+        onboardingState: welcome.state,
+        options: welcome.options,
+      });
+    }
+
+    if (needsOnboarding && context?.onboardingState) {
+      const stepResult = processOnboardingStep(context.onboardingState, message);
+
+      // Cuando llegamos a 'done', aplicamos las configuraciones reales en la DB.
+      if (stepResult.state.step === "done" && context.onboardingState.step !== "done") {
+        await applyOnboardingToDb(user.id, stepResult.state);
+      }
+
+      return NextResponse.json({
+        response: stepResult.message,
+        action: "onboarding",
+        onboardingState: stepResult.state,
+        options: stepResult.options,
+        finished: stepResult.state.step === "done" && context.onboardingState.step !== "done",
+      });
+    }
 
     // Si hay una acción pendiente y el usuario confirma
     if (context?.pendingAction) {
@@ -197,5 +236,76 @@ export async function POST(request: NextRequest) {
       { error: "Error interno al procesar el mensaje" },
       { status: 500 }
     );
+  }
+}
+
+// Aplica el estado del onboarding a la DB de una vez: professional fields,
+// schedule_config con los días/horarios elegidos, y primer service.
+// Se ejecuta cuando el flujo llega a step='done'. Fire and forget desde la UX:
+// incluso si falla parcial, el usuario ya ve el mensaje de cierre.
+async function applyOnboardingToDb(userId: string, state: OnboardingState) {
+  const admin = createAdminClient();
+  const d = state.data;
+
+  try {
+    // 1) Actualizar professional con línea, especialidad, bio y marcar onboarding completo
+    await admin
+      .from("professionals")
+      .update({
+        line: d.line,
+        specialty: d.specialty,
+        bio: d.bio || null,
+        onboarding_completed: true,
+        onboarding_completed_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    // 2) Upsert schedule_config con los días y horarios elegidos
+    if (d.workingDays && d.startTime && d.endTime) {
+      await admin
+        .from("schedule_configs")
+        .upsert(
+          {
+            professional_id: userId,
+            working_days: d.workingDays,
+            slot_duration: d.serviceDuration || 30,
+          },
+          { onConflict: "professional_id" }
+        );
+
+      // 3) Crear working_hours para cada día elegido (si no existen ya)
+      const existingHours = await admin
+        .from("working_hours")
+        .select("day_of_week")
+        .eq("professional_id", userId);
+      const existingDays = new Set((existingHours.data || []).map((h: { day_of_week: number }) => h.day_of_week));
+      const toInsert = d.workingDays
+        .filter((day) => !existingDays.has(day))
+        .map((day) => ({
+          professional_id: userId,
+          day_of_week: day,
+          start_time: d.startTime,
+          end_time: d.endTime,
+        }));
+      if (toInsert.length > 0) {
+        await admin.from("working_hours").insert(toInsert);
+      }
+    }
+
+    // 4) Crear el primer servicio
+    if (d.serviceName) {
+      await admin.from("services").insert({
+        professional_id: userId,
+        name: d.serviceName,
+        duration_minutes: d.serviceDuration || 30,
+        price: d.servicePrice || null,
+        show_price: false,
+        is_active: true,
+        line: d.line || "healthcare",
+      });
+    }
+  } catch (err) {
+    console.error("[MIA Onboarding] Error aplicando configuración:", err);
+    // No throw — queremos que el usuario vea el mensaje de cierre aunque la DB falle.
   }
 }

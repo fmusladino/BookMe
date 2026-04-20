@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { AppointmentStatus } from "@/types";
 import { z } from "zod";
 import { validateAppointmentSlot } from "@/lib/schedule/validation";
-import { sendBookingConfirmation, getNotificationContext } from "@/lib/notifications/send";
+import { sendBookingConfirmation, getNotificationContext, sendPushToProNewBooking } from "@/lib/notifications/send";
 // Import dinámico para no romper si googleapis no está instalado
 const syncAppointmentCreated = async (appointmentId: string) => {
   try {
@@ -164,9 +164,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Enviar notificación de confirmación al paciente (fire and forget)
+    // Enviar notificación de confirmación al paciente + push al profesional (fire and forget)
     getNotificationContext(data.id).then((ctx) => {
-      if (ctx) sendBookingConfirmation(ctx);
+      if (!ctx) return;
+      sendBookingConfirmation(ctx);
+      // Push al profesional cuando se crea un turno (feature Standard+)
+      sendPushToProNewBooking(ctx).catch((err) =>
+        console.error("[Push] Error al notificar al profesional:", err),
+      );
     }).catch((err) => console.error("[Notifications] Error al obtener contexto:", err));
 
     // Sync con Google Calendar (fire and forget)

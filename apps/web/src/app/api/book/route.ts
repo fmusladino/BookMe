@@ -12,6 +12,14 @@ const isoDateString = z.string().refine(
   { message: "Fecha inválida" }
 );
 
+// Datos de guest (reserva sin registro). Solo obligatorios si el usuario no está autenticado.
+const guestSchema = z.object({
+  full_name: z.string().trim().min(3, "Nombre muy corto").max(150),
+  email: z.string().email("Email inválido").toLowerCase(),
+  phone: z.string().trim().min(6, "Teléfono muy corto").max(40),
+  dni: z.string().trim().max(20).optional(),
+});
+
 // Schema de validación para reserva de turno
 const bookAppointmentSchema = z.object({
   professional_id: z.string().uuid("ID de profesional inválido"),
@@ -20,6 +28,8 @@ const bookAppointmentSchema = z.object({
   ends_at: isoDateString,
   notes: z.string().max(500, "Notas no pueden exceder 500 caracteres").optional(),
   modality: z.enum(["presencial", "virtual"]).optional().default("presencial"),
+  // Si no hay user autenticado, el cliente manda esto y creamos un paciente guest.
+  guest: guestSchema.optional(),
 });
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -39,11 +49,7 @@ export async function POST(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser();
 
-    if (isDev) console.log("[BOOK] Auth:", user ? "OK" : "FAIL", authError?.message || "");
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
+    if (isDev) console.log("[BOOK] Auth:", user ? "OK" : "GUEST");
 
     const body = (await request.json()) as unknown;
     if (isDev) console.log("[BOOK] Body recibido");
@@ -57,33 +63,70 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { professional_id, service_id, starts_at, ends_at, notes, modality } = parsed.data;
-    if (isDev) console.log("[BOOK] Datos válidos:", { starts_at, ends_at });
+    const { professional_id, service_id, starts_at, ends_at, notes, modality, guest } = parsed.data;
+    if (isDev) console.log("[BOOK] Datos válidos:", { starts_at, ends_at, isGuest: !user });
+
+    // Reserva como guest (sin registro): exigir datos del invitado.
+    // Reserva logueada: usar datos del profile.
+    if (!user && !guest) {
+      return NextResponse.json(
+        { error: "Faltan datos del paciente (nombre, email y teléfono)" },
+        { status: 400 }
+      );
+    }
+
+    // Rate limit más estricto para guests (sin fricción de auth, mayor riesgo de spam)
+    if (!user) {
+      const guestRateError = checkRateLimit(`book-guest:${ip}`, 5, 60_000);
+      if (guestRateError) return guestRateError;
+    }
 
     // Admin client para operaciones que necesitan bypassear RLS
     // (el paciente autenticado no tiene permisos de INSERT en patients ni appointments)
     const adminClient = createAdminClient();
     if (isDev) console.log("[BOOK] Admin client creado OK");
 
-    // Verificar que el usuario tiene rol de paciente
-    const { data: userProfile, error: profileError } = await adminClient
-      .from("profiles")
-      .select("id, role, full_name, phone, dni")
-      .eq("id", user.id)
-      .single();
+    // Si hay usuario logueado, verificar que tiene rol de paciente y usar sus datos.
+    // Si es guest, los datos vienen del schema `guest` validado arriba.
+    let userProfile: { id: string | null; full_name: string; phone: string | null; dni: string | null; email: string | null };
 
-    if (isDev) console.log("[BOOK] Profile result:", userProfile ? "OK" : "NULL");
+    if (user) {
+      const { data: profile, error: profileError } = await adminClient
+        .from("profiles")
+        .select("id, role, full_name, phone, dni")
+        .eq("id", user.id)
+        .single();
 
-    if (profileError || !userProfile) {
-      console.error("[BOOK] ERROR profile:", profileError);
-      return NextResponse.json({ error: "Perfil de usuario no encontrado" }, { status: 404 });
-    }
+      if (isDev) console.log("[BOOK] Profile result:", profile ? "OK" : "NULL");
 
-    if (userProfile.role !== "patient") {
-      return NextResponse.json(
-        { error: "Solo los pacientes pueden reservar turnos" },
-        { status: 403 }
-      );
+      if (profileError || !profile) {
+        console.error("[BOOK] ERROR profile:", profileError);
+        return NextResponse.json({ error: "Perfil de usuario no encontrado" }, { status: 404 });
+      }
+
+      if (profile.role !== "patient") {
+        return NextResponse.json(
+          { error: "Solo los pacientes pueden reservar turnos" },
+          { status: 403 }
+        );
+      }
+
+      userProfile = {
+        id: profile.id,
+        full_name: profile.full_name,
+        phone: profile.phone,
+        dni: profile.dni,
+        email: user.email || null,
+      };
+    } else {
+      // Guest checkout: usamos los datos del formulario público.
+      userProfile = {
+        id: null,
+        full_name: guest!.full_name,
+        phone: guest!.phone,
+        dni: guest!.dni || null,
+        email: guest!.email,
+      };
     }
 
     // Verificar que el profesional existe y está activo
@@ -107,23 +150,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar registro de paciente para este profesional
-    // Primero buscar por profile_id, luego por DNI (el profesional pudo haberlo creado manualmente)
+    // Buscar registro de paciente para este profesional.
+    // Orden de matcheo: (1) profile_id si está logueado, (2) DNI, (3) email (clave de identidad para guests).
     let existingPatient: { id: string } | null = null;
 
-    const { data: byProfile } = await adminClient
-      .from("patients")
-      .select("id")
-      .eq("professional_id", professional_id)
-      .eq("profile_id", user.id)
-      .maybeSingle();
+    if (user) {
+      const { data: byProfile } = await adminClient
+        .from("patients")
+        .select("id")
+        .eq("professional_id", professional_id)
+        .eq("profile_id", user.id)
+        .maybeSingle();
+      if (byProfile) existingPatient = byProfile;
+    }
 
-    if (isDev) console.log("[BOOK] Patient by profile_id:", byProfile ? "FOUND" : "NOT FOUND");
-
-    if (byProfile) {
-      existingPatient = byProfile;
-    } else if (userProfile.dni) {
-      // Buscar por DNI (caso: el profesional creó el paciente manualmente)
+    if (!existingPatient && userProfile.dni) {
+      // Por DNI (el profesional pudo haberlo creado manualmente)
       const { data: byDni } = await adminClient
         .from("patients")
         .select("id")
@@ -132,32 +174,54 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (byDni) {
-        // Vincular el profile_id al paciente existente
-        await adminClient
-          .from("patients")
-          .update({ profile_id: user.id })
-          .eq("id", byDni.id);
+        if (user) {
+          await adminClient.from("patients").update({ profile_id: user.id }).eq("id", byDni.id);
+        }
         existingPatient = byDni;
       }
     }
+
+    if (!existingPatient && userProfile.email) {
+      // Por email (crítico para guests que vuelven a reservar)
+      const { data: byEmail } = await adminClient
+        .from("patients")
+        .select("id")
+        .eq("professional_id", professional_id)
+        .eq("email", userProfile.email.toLowerCase())
+        .maybeSingle();
+
+      if (byEmail) {
+        if (user) {
+          await adminClient.from("patients").update({ profile_id: user.id }).eq("id", byEmail.id);
+        }
+        existingPatient = byEmail;
+      }
+    }
+
+    if (isDev) console.log("[BOOK] Existing patient:", existingPatient ? "FOUND" : "NOT FOUND");
 
     let patientId: string;
 
     if (existingPatient) {
       patientId = existingPatient.id;
     } else {
-      // Auto-crear paciente usando datos del perfil
-      // DNI puede estar vacío si el paciente no lo completó en su perfil
-      const patientDni = userProfile.dni || `WEB-${user.id.slice(0, 8)}`;
+      // Auto-crear paciente. Si es guest, profile_id queda null.
+      // El DNI es NOT NULL en la tabla — si el paciente no lo dio, generamos un placeholder
+      // usando email o un token aleatorio.
+      const dniPlaceholder = userProfile.id
+        ? `WEB-${userProfile.id.slice(0, 8)}`
+        : `GUEST-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+      const patientDni = userProfile.dni || dniPlaceholder;
+
       const { data: newPatient, error: createPatientError } = await adminClient
         .from("patients")
         .insert({
           professional_id,
-          profile_id: user.id,
+          profile_id: userProfile.id, // null si es guest
           full_name: userProfile.full_name,
           dni: patientDni,
           phone: userProfile.phone,
-          email: user.email,
+          email: userProfile.email,
           is_particular: true,
         })
         .select("id")
@@ -243,7 +307,8 @@ export async function POST(request: NextRequest) {
         starts_at,
         ends_at,
         notes: notes || null,
-        booked_by: user.id,
+        // booked_by: null para reservas guest (no hay user en auth)
+        booked_by: user?.id || null,
         status: "confirmed" as AppointmentStatus,
         modality,
         meet_url: meetUrl,

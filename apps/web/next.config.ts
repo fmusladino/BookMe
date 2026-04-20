@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // Transpila los packages del monorepo
@@ -114,4 +115,16 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap con Sentry solo si hay DSN configurado (sino no toca nada).
+// Los uploads de source maps suceden en build time vía SENTRY_AUTH_TOKEN.
+export default process.env.SENTRY_DSN
+  ? withSentryConfig(nextConfig, {
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      silent: !process.env.CI,
+      hideSourceMaps: true,
+      disableLogger: true,
+      // Upload source maps solo si hay auth token (build de CI, no dev local)
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+    })
+  : nextConfig;

@@ -27,3 +27,14 @@ supabase/.temp
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/playwright/.cache/
+apps/web/.env.test.local
+
+# ─── Archivos locales (editores, Claude Code) ───
+.claude/
+.~lock.*#
+*.tsbuildinfo

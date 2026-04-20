@@ -10,14 +10,22 @@ interface ChatMessage {
   role: "user" | "mia";
   content: string;
   timestamp: Date;
-  action?: "confirm_create" | "confirm_cancel" | "confirm_block";
+  action?: "confirm_create" | "confirm_cancel" | "confirm_block" | "onboarding";
   actionData?: Record<string, unknown>;
+  options?: string[];
 }
+
+// Estado del flujo de onboarding (se recibe del backend y se reenvía en cada mensaje).
+// Shape mínima — la tipamos como unknown para no duplicar la interface del backend.
+type OnboardingState = { step: string; data: Record<string, unknown> };
 
 interface MiaApiResponse {
   response: string;
-  action?: "confirm_create" | "confirm_cancel" | "confirm_block";
+  action?: "confirm_create" | "confirm_cancel" | "confirm_block" | "onboarding";
   actionData?: Record<string, unknown>;
+  onboardingState?: OnboardingState;
+  options?: string[];
+  finished?: boolean;
 }
 
 export function MiaFab() {
@@ -30,6 +38,8 @@ export function MiaFab() {
     data: Record<string, unknown>;
   } | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
+  // Estado del onboarding: si está set, MIA está en modo guía paso-a-paso.
+  const [onboardingState, setOnboardingState] = useState<OnboardingState | null>(null);
 
   const { user } = useSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,19 +54,47 @@ export function MiaFab() {
     scrollToBottom();
   }, [messages, loading]);
 
-  // Inicializar con mensaje de bienvenida cuando se abre
+  // Inicializar al abrir: pedimos al backend el mensaje de bienvenida.
+  // El backend decide si arranca en modo onboarding (primera vez) o saluda normal.
   useEffect(() => {
-    if (open && !hasInitialized && user?.full_name) {
-      const firstName = user.full_name.split(" ")[0];
-      const welcomeMessage: ChatMessage = {
-        id: `mia-welcome-${Date.now()}`,
-        role: "mia",
-        content: `¡Hola ${firstName}! Soy MIA, tu asistente inteligente.\n\nPuedo ayudarte a gestionar turnos, bloquear horarios y consultar tu agenda. ¿En qué te puedo ayudar?`,
-        timestamp: new Date(),
-      };
-      setMessages([welcomeMessage]);
-      setHasInitialized(true);
-    }
+    if (!open || hasInitialized || !user?.full_name) return;
+    setHasInitialized(true);
+
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("/api/mia/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: "hola",
+            context: { startOnboarding: true },
+          }),
+        });
+        if (!res.ok) throw new Error("chat init failed");
+        const data = (await res.json()) as MiaApiResponse;
+        setMessages([{
+          id: `mia-welcome-${Date.now()}`,
+          role: "mia",
+          content: data.response,
+          timestamp: new Date(),
+          action: data.action,
+          options: data.options,
+        }]);
+        if (data.onboardingState) setOnboardingState(data.onboardingState);
+      } catch {
+        // Fallback al mensaje estático si el backend no responde
+        const firstName = user.full_name.split(" ")[0];
+        setMessages([{
+          id: `mia-welcome-${Date.now()}`,
+          role: "mia",
+          content: `¡Hola ${firstName}! Soy MIA, tu asistente inteligente.\n\nPuedo ayudarte a gestionar turnos, bloquear horarios y consultar tu agenda. ¿En qué te puedo ayudar?`,
+          timestamp: new Date(),
+        }]);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [open, hasInitialized, user?.full_name]);
 
   // Solo mostrar para profesionales
@@ -83,12 +121,11 @@ export function MiaFab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: input,
-          context: pendingAction
-            ? {
-                pendingAction: pendingAction.action,
-                pendingData: pendingAction.data,
-              }
-            : undefined,
+          context: onboardingState
+            ? { onboardingState }
+            : pendingAction
+              ? { pendingAction: pendingAction.action, pendingData: pendingAction.data }
+              : undefined,
         }),
       });
 
@@ -103,24 +140,20 @@ export function MiaFab() {
         role: "mia",
         content: data.response,
         timestamp: new Date(),
-        action: data.action as
-          | "confirm_create"
-          | "confirm_cancel"
-          | "confirm_block"
-          | undefined,
+        action: data.action,
         actionData: data.actionData,
+        options: data.options,
       };
 
       setMessages((prev) => [...prev, miaMessage]);
 
-      // Si MIA responde con una acción, guardar como pendiente
-      if (data.action && data.actionData) {
-        setPendingAction({
-          action: data.action,
-          data: data.actionData,
-        });
+      // Onboarding en curso: persistimos estado. Cuando finaliza (data.finished),
+      // limpiamos el estado y MIA vuelve al modo normal.
+      if (data.onboardingState) {
+        setOnboardingState(data.finished ? null : data.onboardingState);
+      } else if (data.action && data.actionData && data.action !== "onboarding") {
+        setPendingAction({ action: data.action, data: data.actionData });
       } else {
-        // Si no hay acción, limpiar pendiente
         setPendingAction(null);
       }
     } catch (error) {
@@ -265,7 +298,7 @@ export function MiaFab() {
               )}
 
               {/* Confirmation buttons */}
-              {message.role === "mia" && message.action && pendingAction && (
+              {message.role === "mia" && message.action && message.action !== "onboarding" && pendingAction && (
                 <div className="flex gap-2 justify-start mb-3 ml-9">
                   <button
                     onClick={() => handleConfirmAction(true)}
@@ -281,6 +314,29 @@ export function MiaFab() {
                   >
                     Cancelar
                   </button>
+                </div>
+              )}
+
+              {/* Quick options para onboarding (botones de respuesta rápida) */}
+              {message.role === "mia" && message.options && message.options.length > 0 && onboardingState && (
+                <div className="flex flex-wrap gap-2 justify-start mb-3 ml-9">
+                  {message.options.map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => {
+                        setInput(opt);
+                        // Disparar envío en el próximo tick
+                        setTimeout(() => {
+                          const form = document.getElementById("mia-chat-input") as HTMLInputElement | null;
+                          form?.form?.requestSubmit();
+                        }, 0);
+                      }}
+                      disabled={loading}
+                      className="rounded-full bg-primary/10 text-primary px-3 py-1.5 text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-50"
+                    >
+                      {opt}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
