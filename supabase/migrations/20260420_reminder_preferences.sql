@@ -15,20 +15,36 @@ ALTER TABLE professionals
 -- - cada offset debe ser > 0 (no tiene sentido 0 o negativo)
 -- - cada offset debe ser <= 7 días (10080 min) para no revisar ventanas absurdas
 -- - canales permitidos solo 'email' o 'whatsapp'
+--
+-- Postgres no permite subqueries en CHECK, así que usamos una función
+-- IMMUTABLE que valida el array completo.
+CREATE OR REPLACE FUNCTION check_reminder_offsets(offsets int[])
+RETURNS boolean
+LANGUAGE plpgsql IMMUTABLE
+AS $$
+DECLARE
+  o int;
+BEGIN
+  IF offsets IS NULL OR array_length(offsets, 1) IS NULL THEN
+    RETURN true;
+  END IF;
+  IF array_length(offsets, 1) > 5 THEN
+    RETURN false;
+  END IF;
+  FOREACH o IN ARRAY offsets LOOP
+    IF o <= 0 OR o > 10080 THEN
+      RETURN false;
+    END IF;
+  END LOOP;
+  RETURN true;
+END;
+$$;
+
 ALTER TABLE professionals
   DROP CONSTRAINT IF EXISTS professionals_reminder_offsets_check;
 ALTER TABLE professionals
   ADD  CONSTRAINT professionals_reminder_offsets_check
-  CHECK (
-    array_length(reminder_offsets, 1) IS NULL
-    OR (
-      array_length(reminder_offsets, 1) <= 5
-      AND NOT EXISTS (
-        SELECT 1 FROM unnest(reminder_offsets) AS o
-        WHERE o <= 0 OR o > 10080
-      )
-    )
-  );
+  CHECK (check_reminder_offsets(reminder_offsets));
 
 ALTER TABLE professionals
   DROP CONSTRAINT IF EXISTS professionals_reminder_channels_check;
