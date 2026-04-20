@@ -129,6 +129,8 @@ export type Database = {
           mp_subscription_id: string | null;
           mp_plan_id: string | null;
           default_meet_url: string | null;
+          reminder_offsets: number[];
+          reminder_channels: string[];
           created_at: string;
         };
         Insert: {
@@ -155,6 +157,8 @@ export type Database = {
           subscription_expires_at?: string | null;
           mp_subscription_id?: string | null;
           mp_plan_id?: string | null;
+          reminder_offsets?: number[];
+          reminder_channels?: string[];
           created_at?: string;
         };
         Update: {
@@ -182,6 +186,8 @@ export type Database = {
           mp_subscription_id?: string | null;
           mp_plan_id?: string | null;
           default_meet_url?: string | null;
+          reminder_offsets?: number[];
+          reminder_channels?: string[];
         };
         Relationships: [];
       };
@@ -425,6 +431,24 @@ export type Database = {
           updated_at?: string;
           cancelled_at?: string | null;
           cancellation_reason?: string | null;
+        };
+        Relationships: [];
+      };
+      appointment_reminders_sent: {
+        Row: {
+          appointment_id: string;
+          offset_minutes: number;
+          sent_at: string;
+        };
+        Insert: {
+          appointment_id: string;
+          offset_minutes: number;
+          sent_at?: string;
+        };
+        Update: {
+          appointment_id?: string;
+          offset_minutes?: number;
+          sent_at?: string;
         };
         Relationships: [];
       };

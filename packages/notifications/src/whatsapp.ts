@@ -55,15 +55,30 @@ export async function sendConfirmationWhatsApp(data: WhatsAppMessageData) {
   });
 }
 
-export async function sendReminderWhatsApp(data: WhatsAppMessageData) {
+export async function sendReminderWhatsApp(
+  data: WhatsAppMessageData & { offsetMinutes?: number }
+) {
   const dateStr = formatDateAR(data.startsAt);
   const service = data.serviceName ? `\n*Servicio:* ${data.serviceName}` : "";
+  const offsetLabel = formatOffsetLabelWpp(data.offsetMinutes ?? 1440);
 
   return getClient().messages.create({
     from: FROM,
     to: toWhatsAppNumber(data.to),
-    body: `⏰ *Recordatorio de turno*\n\nHola ${data.patientName}, mañana tenés turno con *${data.professionalName}*.\n\n*Fecha:* ${dateStr}${service}\n\n_BookMe — bookme.ar_`,
+    body: `⏰ *Recordatorio de turno*\n\nHola ${data.patientName}, ${offsetLabel} tenés turno con *${data.professionalName}*.\n\n*Fecha:* ${dateStr}${service}\n\n_BookMe — bookme.ar_`,
   });
+}
+
+function formatOffsetLabelWpp(minutes: number): string {
+  if (minutes < 60) return `en ${minutes} minutos`;
+  if (minutes === 1440) return "mañana";
+  if (minutes === 2880) return "pasado mañana";
+  if (minutes % 1440 === 0) return `en ${minutes / 1440} días`;
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return hours === 1 ? "en 1 hora" : `en ${hours} horas`;
+  }
+  return `en ${Math.round(minutes / 60)} horas`;
 }
 
 export async function sendRescheduleWhatsApp(

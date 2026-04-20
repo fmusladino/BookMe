@@ -37,20 +37,37 @@ export async function sendConfirmationEmail(data: AppointmentEmailData) {
   });
 }
 
-// Envía recordatorio 24hs antes del turno
-export async function sendReminderEmail(data: AppointmentEmailData) {
+// Envía recordatorio X minutos antes del turno (24hs por defecto)
+export async function sendReminderEmail(
+  data: AppointmentEmailData & { offsetMinutes?: number }
+) {
   const dateStr = data.startsAt.toLocaleString("es-AR", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: "America/Argentina/Buenos_Aires",
   });
+  const offsetLabel = formatOffsetLabel(data.offsetMinutes ?? 1440);
 
   return getResend().emails.send({
     from: FROM,
     to: data.to,
-    subject: `Recordatorio: turno mañana con ${data.professionalName}`,
-    html: buildReminderHtml({ ...data, dateStr }),
+    subject: `Recordatorio: turno ${offsetLabel} con ${data.professionalName}`,
+    html: buildReminderHtml({ ...data, dateStr, offsetLabel }),
   });
+}
+
+// Convierte minutos a una etiqueta natural para el asunto/cuerpo del recordatorio.
+// 1440 → "mañana", 120 → "en 2 horas", 30 → "en 30 minutos", 2880 → "pasado mañana".
+function formatOffsetLabel(minutes: number): string {
+  if (minutes < 60) return `en ${minutes} minutos`;
+  if (minutes === 1440) return "mañana";
+  if (minutes === 2880) return "pasado mañana";
+  if (minutes % 1440 === 0) return `en ${minutes / 1440} días`;
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return hours === 1 ? "en 1 hora" : `en ${hours} horas`;
+  }
+  return `en ${Math.round(minutes / 60)} horas`;
 }
 
 // Aviso ~5 min antes de que arranque la videoconsulta. Requiere meetUrl.
@@ -182,12 +199,14 @@ function buildConfirmationHtml(
   `;
 }
 
-function buildReminderHtml(data: AppointmentEmailData & { dateStr: string }) {
+function buildReminderHtml(
+  data: AppointmentEmailData & { dateStr: string; offsetLabel: string }
+) {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #0f172a;">Recordatorio de turno</h2>
       <p>Hola <strong>${data.patientName}</strong>,</p>
-      <p>Te recordamos que mañana tenés turno con <strong>${data.professionalName}</strong>.</p>
+      <p>Te recordamos que ${data.offsetLabel} tenés turno con <strong>${data.professionalName}</strong>.</p>
       <div style="background: #f1f5f9; padding: 16px; border-radius: 8px; margin: 24px 0;">
         <p style="margin: 0;"><strong>Fecha y hora:</strong> ${data.dateStr}</p>
         ${data.serviceName ? `<p style="margin: 8px 0 0;"><strong>Servicio:</strong> ${data.serviceName}</p>` : ""}

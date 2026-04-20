@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check, Building2, Loader2, X, Search } from "lucide-react";
+import { Clock, Plus, Trash2, Palmtree, Save, Calendar, Link2, Unlink, Globe, EyeOff, Video, Copy, Check, Building2, Loader2, X, Search, Bell } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { invalidateScheduleConfigGlobal } from "@/hooks/use-schedule-config";
 import { useSession } from "@/hooks/use-session";
@@ -130,6 +130,21 @@ interface ProfInsurance {
   professional_insurance_id: string;
 }
 
+// Presets comunes de recordatorios (en minutos antes del turno)
+const REMINDER_PRESETS: Array<{ minutes: number; label: string }> = [
+  { minutes: 10080, label: "7 días antes" },
+  { minutes: 4320, label: "3 días antes" },
+  { minutes: 2880, label: "2 días antes" },
+  { minutes: 1440, label: "24 hs antes" },
+  { minutes: 720, label: "12 hs antes" },
+  { minutes: 240, label: "4 hs antes" },
+  { minutes: 120, label: "2 hs antes" },
+  { minutes: 60, label: "1 hora antes" },
+  { minutes: 30, label: "30 min antes" },
+];
+
+const MAX_REMINDERS = 5;
+
 export default function ConfiguracionPage() {
   const { user, refresh: refreshSession } = useSession();
   const [loading, setLoading] = useState(true);
@@ -144,6 +159,10 @@ export default function ConfiguracionPage() {
   const [newInsuranceName, setNewInsuranceName] = useState("");
   const [addingInsurance, setAddingInsurance] = useState(false);
   const [insuranceSearch, setInsuranceSearch] = useState("");
+  // Recordatorios configurables
+  const [reminderOffsets, setReminderOffsets] = useState<number[]>([1440]);
+  const [reminderChannels, setReminderChannels] = useState<string[]>(["email", "whatsapp"]);
+  const [reminderSaving, setReminderSaving] = useState(false);
   const searchParams = useSearchParams();
 
   const [config, setConfig] = useState<ScheduleConfigState>({
@@ -242,6 +261,64 @@ export default function ConfiguracionPage() {
     }
   }, []);
 
+  // Fetch preferencias de recordatorios
+  const fetchReminderPrefs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/professionals/me/reminder-prefs");
+      if (res.ok) {
+        const data = await res.json() as { offsets: number[]; channels: string[] };
+        setReminderOffsets(data.offsets ?? [1440]);
+        setReminderChannels(data.channels ?? ["email", "whatsapp"]);
+      }
+    } catch {
+      // Silencioso
+    }
+  }, []);
+
+  const saveReminderPrefs = async (offsets: number[], channels: string[]) => {
+    setReminderSaving(true);
+    try {
+      const res = await fetch("/api/professionals/me/reminder-prefs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offsets, channels }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { offsets: number[]; channels: string[] };
+        setReminderOffsets(data.offsets);
+        setReminderChannels(data.channels);
+        toast.success("Recordatorios actualizados");
+      } else {
+        const data = await res.json() as { error?: string };
+        toast.error(data.error ?? "Error al guardar recordatorios");
+      }
+    } catch {
+      toast.error("Error al guardar recordatorios");
+    } finally {
+      setReminderSaving(false);
+    }
+  };
+
+  const toggleReminderPreset = (minutes: number) => {
+    const isActive = reminderOffsets.includes(minutes);
+    const next = isActive
+      ? reminderOffsets.filter((o) => o !== minutes)
+      : [...reminderOffsets, minutes].sort((a, b) => b - a);
+    if (!isActive && next.length > MAX_REMINDERS) {
+      toast.info(`Máximo ${MAX_REMINDERS} recordatorios por turno`);
+      return;
+    }
+    saveReminderPrefs(next, reminderChannels);
+  };
+
+  const toggleReminderChannel = (channel: "email" | "whatsapp") => {
+    const isActive = reminderChannels.includes(channel);
+    const next = isActive
+      ? reminderChannels.filter((c) => c !== channel)
+      : [...reminderChannels, channel];
+    saveReminderPrefs(reminderOffsets, next);
+  };
+
   // Fetch obras sociales del profesional
   const fetchProfInsurances = useCallback(async () => {
     setInsurancesLoading(true);
@@ -306,7 +383,8 @@ export default function ConfiguracionPage() {
     fetchGcalStatus();
     fetchVisibility();
     fetchProfInsurances();
-  }, [fetchConfig, fetchGcalStatus, fetchVisibility, fetchProfInsurances]);
+    fetchReminderPrefs();
+  }, [fetchConfig, fetchGcalStatus, fetchVisibility, fetchProfInsurances, fetchReminderPrefs]);
 
   // Mostrar toast después del redirect de Google OAuth
   useEffect(() => {
@@ -616,6 +694,82 @@ export default function ConfiguracionPage() {
               </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Recordatorios configurables */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Bell className="h-5 w-5 text-amber-500" />
+            <div className="flex-1">
+              <CardTitle className="text-lg">Recordatorios de turno</CardTitle>
+              <CardDescription>
+                Elegí cuántos recordatorios querés enviar y por qué canal. Hasta {MAX_REMINDERS} por turno.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label>¿Cuándo enviar recordatorios?</Label>
+            <div className="flex flex-wrap gap-2">
+              {REMINDER_PRESETS.map((preset) => {
+                const active = reminderOffsets.includes(preset.minutes);
+                return (
+                  <button
+                    key={preset.minutes}
+                    onClick={() => toggleReminderPreset(preset.minutes)}
+                    disabled={reminderSaving}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {active && <Check className="inline mr-1 h-3.5 w-3.5" />}
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            {reminderOffsets.length === 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Sin recordatorios seleccionados: tus pacientes no recibirán avisos automáticos.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Canales</Label>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reminderChannels.includes("email")}
+                  onChange={() => toggleReminderChannel("email")}
+                  disabled={reminderSaving}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-sm">Email</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reminderChannels.includes("whatsapp")}
+                  onChange={() => toggleReminderChannel("whatsapp")}
+                  disabled={reminderSaving}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-sm">WhatsApp</span>
+              </label>
+            </div>
+            {reminderChannels.length === 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Sin canales seleccionados: los recordatorios quedan desactivados.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
