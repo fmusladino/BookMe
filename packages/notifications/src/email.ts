@@ -336,6 +336,118 @@ function buildTrialExpiringHtml(data: TrialEmailData, dateStr: string) {
   `;
 }
 
+// ─── Payment Reminder Emails (impago de abono mensual) ─────────────────────
+
+export type PaymentReminderKind = "soft" | "firm" | "final" | "read_only";
+
+export interface PaymentReminderEmailData {
+  to: string;
+  professionalName: string;
+  amount: number;
+  currency: string;          // "ARS", "USD"…
+  daysOverdue: number;       // 7, 10, 14, 15
+  retryUrl?: string;
+}
+
+/**
+ * Envía recordatorio de pago atrasado al profesional.
+ * Tono y urgencia varían según el `kind`:
+ *   - soft       (día 7): amable, "no pudimos procesar"
+ *   - firm       (día 10): firme, "actualizá tu medio de pago"
+ *   - final      (día 14): aviso de suspensión próxima
+ *   - read_only  (día 15): notificación de cuenta congelada
+ */
+export async function sendPaymentReminderEmail(
+  kind: PaymentReminderKind,
+  data: PaymentReminderEmailData
+) {
+  const subject = subjectFor(kind, data);
+  return getResend().emails.send({
+    from: FROM,
+    to: data.to,
+    subject,
+    html: buildPaymentReminderHtml(kind, data),
+  });
+}
+
+function subjectFor(kind: PaymentReminderKind, data: PaymentReminderEmailData): string {
+  switch (kind) {
+    case "soft":
+      return "No pudimos procesar el pago de tu suscripción";
+    case "firm":
+      return "Tu pago sigue pendiente — actualizá tu medio de pago";
+    case "final":
+      return `Última notificación: tu cuenta será suspendida en ${15 - data.daysOverdue} día(s)`;
+    case "read_only":
+      return "Tu cuenta de BookMe pasó a modo solo lectura";
+  }
+}
+
+function buildPaymentReminderHtml(
+  kind: PaymentReminderKind,
+  data: PaymentReminderEmailData
+): string {
+  const retryUrl = data.retryUrl ?? "https://bookme.ar/dashboard/plan";
+  const amountStr = `${data.currency} ${data.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+
+  // Paleta y copy por nivel de urgencia
+  const palette: Record<PaymentReminderKind, { bg: string; border: string; cta: string; title: string; body: string }> = {
+    soft: {
+      bg: "#fffbeb",
+      border: "#f59e0b",
+      cta: "#0F2A47",
+      title: "No pudimos procesar tu pago",
+      body: `Intentamos cobrar el abono mensual de tu plan en BookMe pero la operación no se completó. Es posible que tu tarjeta esté vencida o sin saldo suficiente.`,
+    },
+    firm: {
+      bg: "#fff7ed",
+      border: "#ea580c",
+      cta: "#ea580c",
+      title: "Tu pago sigue pendiente",
+      body: `Hace ${data.daysOverdue} días que no pudimos cobrar tu abono mensual. Para evitar que tu cuenta se suspenda, actualizá tu medio de pago lo antes posible.`,
+    },
+    final: {
+      bg: "#fef2f2",
+      border: "#dc2626",
+      cta: "#dc2626",
+      title: `Tu cuenta será suspendida en ${15 - data.daysOverdue} día(s)`,
+      body: `Esta es la última notificación antes de que tu cuenta pase a modo solo lectura. Después no vas a poder recibir nuevos turnos hasta que regularices el pago.`,
+    },
+    read_only: {
+      bg: "#fef2f2",
+      border: "#dc2626",
+      cta: "#dc2626",
+      title: "Tu cuenta pasó a modo solo lectura",
+      body: `Pasaron 15 días desde el primer intento de cobro fallido y tu cuenta fue congelada. Tus pacientes ya no pueden reservar online. Regularizá el pago para reactivarla.`,
+    },
+  };
+
+  const p = palette[kind];
+
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #0f172a;">${p.title}</h2>
+      <p>Hola <strong>${data.professionalName}</strong>,</p>
+      <p>${p.body}</p>
+      <div style="background: ${p.bg}; border-left: 4px solid ${p.border}; padding: 16px; border-radius: 4px; margin: 24px 0;">
+        <p style="margin: 0;"><strong>Monto pendiente:</strong> ${amountStr}</p>
+        <p style="margin: 8px 0 0;"><strong>Días desde el fallo:</strong> ${data.daysOverdue}</p>
+      </div>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${retryUrl}"
+           style="display: inline-block; background: ${p.cta}; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          ${kind === "read_only" ? "Reactivar mi cuenta" : "Regularizar pago"}
+        </a>
+      </div>
+      <p style="color: #64748b; font-size: 14px;">
+        Si ya regularizaste el pago, ignorá este mensaje. Si necesitás ayuda, escribinos a
+        <a href="mailto:soporte@bookme.ar" style="color: #0ea5e9;">soporte@bookme.ar</a>.
+      </p>
+      <p style="color: #64748b; font-size: 14px;">BookMe — bookme.ar</p>
+    </div>
+  `;
+}
+
 function buildTrialExpiredHtml(data: Omit<TrialEmailData, "daysLeft">) {
   const upgradeUrl = data.upgradeUrl || "https://bookme.ar/dashboard/configuracion";
 

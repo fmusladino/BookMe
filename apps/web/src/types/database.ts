@@ -9,6 +9,8 @@ export type AppointmentStatus = "pending" | "confirmed" | "cancelled" | "complet
 export type SubscriptionPlan = "free" | "base" | "standard" | "premium";
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "read_only" | "cancelled";
 export type BillingCycle = "monthly" | "annual";
+export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+export type PaymentReminderKind = "soft" | "firm" | "final" | "read_only";
 
 export type Database = {
   public: {
@@ -131,6 +133,7 @@ export type Database = {
           default_meet_url: string | null;
           reminder_offsets: number[];
           reminder_channels: string[];
+          past_due_since: string | null;
           created_at: string;
         };
         Insert: {
@@ -159,6 +162,7 @@ export type Database = {
           mp_plan_id?: string | null;
           reminder_offsets?: number[];
           reminder_channels?: string[];
+          past_due_since?: string | null;
           created_at?: string;
         };
         Update: {
@@ -188,6 +192,7 @@ export type Database = {
           default_meet_url?: string | null;
           reminder_offsets?: number[];
           reminder_channels?: string[];
+          past_due_since?: string | null;
         };
         Relationships: [];
       };
@@ -685,9 +690,88 @@ export type Database = {
         };
         Relationships: [];
       };
+      payments: {
+        Row: {
+          id: string;
+          professional_id: string;
+          period_year: number;
+          period_month: number;
+          amount: number;
+          currency: string;
+          status: PaymentStatus;
+          mp_payment_id: string | null;
+          mp_subscription_id: string | null;
+          failure_reason: string | null;
+          attempted_at: string;
+          paid_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          professional_id: string;
+          period_year: number;
+          period_month: number;
+          amount: number;
+          currency?: string;
+          status?: PaymentStatus;
+          mp_payment_id?: string | null;
+          mp_subscription_id?: string | null;
+          failure_reason?: string | null;
+          attempted_at?: string;
+          paid_at?: string | null;
+        };
+        Update: {
+          status?: PaymentStatus;
+          amount?: number;
+          mp_payment_id?: string | null;
+          failure_reason?: string | null;
+          paid_at?: string | null;
+        };
+        Relationships: [];
+      };
+      payment_reminders: {
+        Row: {
+          id: string;
+          payment_id: string;
+          professional_id: string;
+          kind: PaymentReminderKind;
+          channels: string;
+          sent_at: string;
+          days_overdue: number;
+        };
+        Insert: {
+          id?: string;
+          payment_id: string;
+          professional_id: string;
+          kind: PaymentReminderKind;
+          channels?: string;
+          sent_at?: string;
+          days_overdue: number;
+        };
+        Update: {
+          channels?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
-      [_ in never]: never;
+      v_overdue_professionals: {
+        Row: {
+          professional_id: string;
+          full_name: string;
+          subscription_plan: SubscriptionPlan;
+          subscription_status: SubscriptionStatus;
+          past_due_since: string | null;
+          days_overdue: number | null;
+          last_payment_id: string | null;
+          last_payment_amount: number | null;
+          last_failure_reason: string | null;
+          last_attempt_at: string | null;
+          last_reminder_kind: PaymentReminderKind | null;
+          last_reminder_at: string | null;
+        };
+      };
     };
     Functions: {
       [_ in never]: never;
@@ -699,6 +783,8 @@ export type Database = {
       subscription_plan: SubscriptionPlan;
       subscription_status: SubscriptionStatus;
       billing_cycle: BillingCycle;
+      payment_status: PaymentStatus;
+      payment_reminder_kind: PaymentReminderKind;
     };
     CompositeTypes: {
       [_ in never]: never;

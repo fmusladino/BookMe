@@ -213,7 +213,7 @@ function BannerTrialExpired() {
   );
 }
 
-// ─── Past due: pago pendiente (3 días de gracia) ──────────────────────
+// ─── Past due: pago pendiente (recordatorios día 7/10/14, corte día 15) ─
 function BannerPastDue() {
   return (
     <div className="animate-in fade-in slide-in-from-top-4 duration-300 bg-orange-50 border-b border-orange-200 px-4 py-3 sm:px-6 dark:bg-orange-950/30 dark:border-orange-800">
@@ -221,7 +221,7 @@ function BannerPastDue() {
         <div className="flex items-center gap-3 flex-1">
           <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
           <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
-            Tu suscripción tiene un pago pendiente. Tenés 3 días de gracia para regularizar.
+            Tu suscripción tiene un pago pendiente. Regularizalo antes del día 15 para evitar que tu cuenta pase a modo solo lectura.
           </p>
         </div>
         <Link

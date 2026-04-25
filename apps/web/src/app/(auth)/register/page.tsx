@@ -244,7 +244,7 @@ export default function RegisterPage() {
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-medium text-blue-600 dark:text-blue-400">
-                  30 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
+                  7 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
                 </span>
               </button>
 
@@ -282,7 +282,7 @@ export default function RegisterPage() {
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-medium text-orange-600 dark:text-orange-400">
-                  30 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
+                  7 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
                 </span>
               </button>
             </div>
@@ -318,9 +318,9 @@ export default function RegisterPage() {
           <h1 className="text-4xl font-heading font-bold text-bookme-navy dark:text-bookme-mint">BookMe</h1>
           <p className="mt-2 text-muted-foreground text-sm">
             {isProfessional
-              ? "Registro profesional — 30 días gratis"
+              ? "Registro profesional — 7 días gratis"
               : isCanchas
-                ? "Registro de canchas — 30 días gratis"
+                ? "Registro de canchas — 7 días gratis"
                 : "Reservá tus turnos online"}
           </p>
         </div>
@@ -338,7 +338,7 @@ export default function RegisterPage() {
               </h2>
               <p className="text-sm text-muted-foreground">
                 {isProfessional
-                  ? "Completá tus datos para activar tu trial de 30 días"
+                  ? "Completá tus datos para activar tu trial de 7 días"
                   : isCanchas
                     ? "Configurá tu comercio y empezá a recibir reservas"
                     : "Registrate para reservar turnos"

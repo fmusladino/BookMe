@@ -73,7 +73,7 @@ Opera en dos líneas de producto:
 | 24 | Dark mode + PWA instalable | Toggle en todos los paneles. Instalable en iOS/Android desde el browser | Ambas |
 | 25 | Super Admin en tiempo real | MRR, churn, nuevos registros, activos pagos en vivo. Cupones de descuento para campañas | Admin |
 | 26 | Usuario Marketing | Evolución, métricas landing (GA4), cupones (puede crear), top profes, riesgo abandono | Admin |
-| 27 | Gestión de impago | Aviso día 1 de fallo → gracia 3 días → modo solo lectura hasta regularizar | Sistema |
+| 27 | Gestión de abonos mensuales e impago | Cobro automático día 1 vía MercadoPago. Si falla: recordatorio día 7 (amable) → día 10 (firme) → día 14 (aviso de suspensión) → día 15 modo solo lectura. Canales: email + WhatsApp. Tablas `subscriptions`, `payments`, `payment_reminders` | Sistema |
 | 28 | Trial: avisos de vencimiento | 7 días antes + 3 días antes + día del vencimiento | Sistema |
 | 29 | Soporte | Email soporte@bookme.ar + Centro de ayuda/FAQ autogestionado | Sistema |
 | 30 | Google Analytics 4 | Tracking de uso y comportamiento en plataforma y landing | Sistema |
@@ -86,6 +86,8 @@ Opera en dos líneas de producto:
 - **Historia clínica**: encriptada AES-256 en reposo, visible solo por el profesional propietario
 - **DNI**: identificador único global en toda la plataforma (tanto Healthcare como Business)
 - **Facturación AFIP**: solo para Argentina, vía intermediario (Facturante o Factura.ai)
+- **Pasarela de pago de abonos**: MercadoPago. Webhooks para detectar cobros fallidos y disparar el flujo de recordatorios.
+- **Ciclo de cobro**: mensual, intento día 1. Recordatorios escalonados día 7, 10 y 14. Modo solo lectura desde día 15.
 - **WhatsApp**: número único BookMe (no número propio del profesional)
 - **Receta electrónica y Teleconsulta**: V2, no MVP
 - **PWA**: instalable en iOS/Android desde el browser. Dark mode en todos los paneles
@@ -172,10 +174,13 @@ Una vez aprobada la arquitectura, construí el sistema módulo por módulo en es
 - Métricas básicas (turnos totales, asistidos, cancelados, ausentes)
 - Dashboard financiero (Standard+)
 
-**Módulo 8 — Paneles de admin**
+**Módulo 8 — Paneles de admin y billing**
 - Super Admin: KPIs en tiempo real, gestión de usuarios, cupones, alertas de churn
 - Usuario Marketing
-- Gestión de impago y estados de suscripción
+- Integración MercadoPago: suscripciones (`preapproval`), webhooks de pago, registro en `payments`
+- Cron diario que evalúa impagos y dispara recordatorios (día 7, 10, 14) + cambio a modo solo lectura (día 15)
+- Vista en Super Admin: lista de profesionales con pago atrasado, días de mora, último recordatorio enviado
+- Banner persistente en panel del profesional con CTA "Regularizar pago" mientras `subscription.status = past_due`
 
 ---
 

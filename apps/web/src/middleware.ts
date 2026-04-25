@@ -22,6 +22,7 @@ const PUBLIC_ROUTES = [
   "/complejos",   // páginas públicas de complejos deportivos: /complejos/[slug]
   "/api/webhooks",
   "/api/cron",
+  "/api/exchange-rate",  // cotización USD→ARS para la landing de precios
   "/api/professionals", // directorio público y perfiles
   "/api/directory",     // filtros públicos del directorio (obras sociales, localidades)
   "/api/book",          // reserva (auth se verifica internamente)

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Building2, Star, Check } from "lucide-react";
 import { useFeatures } from "@/hooks/use-features";
+import { useExchangeRate } from "@/hooks/use-exchange-rate";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Datos estáticos de features por plan (labels descriptivos)
@@ -78,6 +79,7 @@ const FALLBACK_CLINIC_PRICES: Record<string, Record<string, number>> = {
 
 export function PricingSection() {
   const { data, loading, getPrice, getClinicPrice } = useFeatures();
+  const { data: rate } = useExchangeRate();
 
   // Helper para precio con fallback
   const price = (plan: string, line: string, cycle = "monthly"): string => {
@@ -103,6 +105,16 @@ export function PricingSection() {
     return n.toLocaleString("es-AR");
   };
 
+  // Conversión USD → ARS usando la cotización "venta" (lo que paga el usuario
+  // cuando compra dólares). Si no hay cotización todavía, devuelve null.
+  const toARS = (usd: string): string | null => {
+    if (!rate) return null;
+    const n = Number(usd);
+    if (!Number.isFinite(n)) return null;
+    const ars = Math.round(n * rate.sell);
+    return ars.toLocaleString("es-AR");
+  };
+
   return (
     <section className="py-20 bg-card">
       <div className="max-w-7xl mx-auto px-4">
@@ -110,7 +122,7 @@ export function PricingSection() {
           Planes y precios
         </h2>
         <p className="text-center text-muted-foreground mb-12 max-w-xl mx-auto">
-          Elegí el plan que mejor se adapte a tu práctica. Todos incluyen 30 días de prueba gratis.
+          Elegí el plan que mejor se adapte a tu práctica. Todos incluyen 7 días de prueba gratis.
         </p>
 
         {/* ── Healthcare ── */}
@@ -144,6 +156,9 @@ export function PricingSection() {
                     <>
                       <span className="text-3xl font-bold text-foreground">USD {price(plan.key, "healthcare")}</span>
                       <span className="text-sm text-muted-foreground">/mes</span>
+                      {toARS(price(plan.key, "healthcare")) && (
+                        <p className="text-xs text-muted-foreground mt-1">≈ $ {toARS(price(plan.key, "healthcare"))} ARS/mes</p>
+                      )}
                     </>
                   )}
                 </div>
@@ -163,7 +178,7 @@ export function PricingSection() {
                       : "border border-border text-foreground hover:bg-muted"
                   }`}
                 >
-                  Probar 30 días
+                  Probar 7 días
                 </Link>
               </div>
             ))}
@@ -201,6 +216,9 @@ export function PricingSection() {
                     <>
                       <span className="text-3xl font-bold text-foreground">USD {price(plan.key, "business")}</span>
                       <span className="text-sm text-muted-foreground">/mes</span>
+                      {toARS(price(plan.key, "business")) && (
+                        <p className="text-xs text-muted-foreground mt-1">≈ $ {toARS(price(plan.key, "business"))} ARS/mes</p>
+                      )}
                     </>
                   )}
                 </div>
@@ -220,7 +238,7 @@ export function PricingSection() {
                       : "border border-border text-foreground hover:bg-muted"
                   }`}
                 >
-                  Probar 30 días
+                  Probar 7 días
                 </Link>
               </div>
             ))}
@@ -262,6 +280,9 @@ export function PricingSection() {
                     <>
                       <span className="text-3xl font-bold text-foreground">USD {clinicPrice(plan.key)}</span>
                       <span className="text-sm text-muted-foreground">/mes</span>
+                      {toARS(clinicPrice(plan.key)) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">≈ $ {toARS(clinicPrice(plan.key))} ARS/mes</p>
+                      )}
                       <p className="text-xs text-muted-foreground mt-1">
                         o USD {formatAnnual(clinicPrice(plan.key, "annual"))}/año{" "}
                         <span className="text-purple-600 dark:text-purple-400 font-medium">(ahorrás 10%)</span>
@@ -291,6 +312,16 @@ export function PricingSection() {
             ))}
           </div>
         </div>
+
+        {/* ── Pie: cotización usada para conversión ── */}
+        {rate && (
+          <p className="mt-10 text-center text-xs text-muted-foreground">
+            Cotización referencial: {rate.name} · compra ${rate.buy.toLocaleString("es-AR")} /
+            venta ${rate.sell.toLocaleString("es-AR")} ·
+            actualizada {new Date(rate.updatedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}.
+            Fuente: dolarapi.com.
+          </p>
+        )}
       </div>
     </section>
   );

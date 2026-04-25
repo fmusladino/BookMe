@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { useFeatures } from "@/hooks/use-features";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useExchangeRate } from "@/hooks/use-exchange-rate";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  CreditCard,
   Check,
   Star,
   Loader2,
@@ -17,8 +17,7 @@ import {
   Clock,
   AlertTriangle,
   CalendarDays,
-  Sparkles,
-  Lock,
+  ExternalLink,
   XCircle,
 } from "lucide-react";
 import { CancelSubscriptionModal } from "@/components/plan/cancel-subscription-modal";
@@ -71,19 +70,27 @@ const BIZ_PLANS: PlanDef[] = [
 
 // ─── Page ───────────────────────────────────────────────────
 export default function PlanPage() {
-  const { user, loading: sessionLoading, refresh: refreshSession } = useSession();
+  const { user, loading: sessionLoading } = useSession();
   const { getPrice, loading: featuresLoading } = useFeatures();
+  const { data: rate } = useExchangeRate();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
-  // Card form (mockeado)
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
-  const [cardName, setCardName] = useState("");
+  // Feedback después de volver de MP
+  useEffect(() => {
+    const mp = searchParams.get("mp");
+    if (mp === "success") {
+      toast.success("Pago procesado. La suscripción se activará en unos segundos.");
+      router.replace("/dashboard/plan");
+    } else if (mp === "failure" || mp === "cancel") {
+      toast.error("El pago no se completó. Podés intentar de nuevo cuando quieras.");
+      router.replace("/dashboard/plan");
+    }
+  }, [searchParams, router]);
 
   const line = user?.professional?.line ?? "healthcare";
   const currentPlan = user?.professional?.plan ?? "free";
@@ -119,60 +126,42 @@ export default function PlanPage() {
     return `USD ${p}`;
   };
 
-  const formatCardNumber = (val: string) => {
-    const cleaned = val.replace(/\D/g, "").slice(0, 16);
-    return cleaned.replace(/(\d{4})(?=\d)/g, "$1 ");
+  const priceInARS = (planKey: string): string | null => {
+    const usd = priceFor(planKey);
+    if (usd === null || !rate) return null;
+    return Math.round(usd * rate.sell).toLocaleString("es-AR");
   };
 
-  const formatExpiry = (val: string) => {
-    const cleaned = val.replace(/\D/g, "").slice(0, 4);
-    if (cleaned.length >= 3) return `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
-    return cleaned;
-  };
-
-  const isCardValid =
-    cardNumber.replace(/\s/g, "").length === 16 &&
-    cardExpiry.length === 5 &&
-    cardCvc.length >= 3 &&
-    cardName.length >= 2;
-
-  // ─── Handle select plan ───────────────────────────────────
-  const handleSelectPlan = (planKey: string) => {
+  // ─── Handle select plan → redirige a MP ──────────────────
+  const handleSelectPlan = async (planKey: string) => {
     if (planKey === currentPlan && subscriptionStatus === "active") return;
     setSelectedPlan(planKey);
-    setShowPaymentForm(true);
-  };
-
-  // ─── Handle confirm ───────────────────────────────────────
-  const handleConfirm = async () => {
-    if (!selectedPlan || !isCardValid) return;
-
-    setSaving(true);
+    setRedirecting(true);
     try {
-      const res = await fetch("/api/subscription/select-plan", {
+      const res = await fetch("/api/subscription/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          plan: selectedPlan,
+          plan: planKey,
           billing_cycle: billingCycle,
-          // Datos de tarjeta mockeados — no se envían a ningún procesador real
-          card_last_four: cardNumber.replace(/\s/g, "").slice(-4),
-          card_brand: "visa",
         }),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Error al seleccionar plan");
+        const err = await res.json().catch(() => ({ error: "Error desconocido" }));
+        const detail = typeof err.detail === "string" ? err.detail : err.detail ? JSON.stringify(err.detail) : null;
+        console.error("[create-checkout] error response", err);
+        throw new Error(detail ? `${err.error ?? "Error"} — ${detail}` : err.error || "Error al generar el link de pago");
       }
 
-      toast.success(`Plan ${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} activado correctamente`);
-      setShowPaymentForm(false);
-      refreshSession();
+      const data = (await res.json()) as { init_point: string };
+      if (!data.init_point) throw new Error("Mercado Pago no devolvió la URL de pago");
+
+      // Redirigir al checkout de Mercado Pago
+      window.location.href = data.init_point;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error");
-    } finally {
-      setSaving(false);
+      setRedirecting(false);
     }
   };
 
@@ -200,7 +189,8 @@ export default function PlanPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Mi Plan</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Elegí el plan que mejor se adapte a tu práctica. Tu tarjeta se cobrará al finalizar el período de prueba.
+          Al elegir un plan vas a Mercado Pago para autorizar la suscripción. Se cobra en pesos según la
+          cotización oficial del dólar al momento del pago.
         </p>
       </div>
 
@@ -243,7 +233,7 @@ export default function PlanPage() {
                     </Badge>
                   )}
                 </div>
-                {subscriptionStatus === "trialing" && daysLeft !== null && (
+                {subscriptionStatus === "trialing" && daysLeft != null && (
                   <p className={`text-sm mt-0.5 ${
                     daysLeft <= 5 ? "text-red-600 dark:text-red-400 font-medium" :
                     daysLeft <= 10 ? "text-amber-600 dark:text-amber-400" :
@@ -388,6 +378,11 @@ export default function PlanPage() {
                   <span className="text-sm text-muted-foreground">
                     /{billingCycle === "monthly" ? "mes" : "año"}
                   </span>
+                  {priceInARS(plan.key) && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ≈ $ {priceInARS(plan.key)} ARS/{billingCycle === "monthly" ? "mes" : "año"}
+                    </p>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -407,18 +402,26 @@ export default function PlanPage() {
                 <Button
                   className="w-full mt-5"
                   variant={plan.highlight ? "default" : "outline"}
-                  disabled={isCurrentPlan && subscriptionStatus === "active"}
+                  disabled={(isCurrentPlan && subscriptionStatus === "active") || redirecting}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleSelectPlan(plan.key);
                   }}
                 >
+                  {redirecting && selectedPlan === plan.key && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   {isCurrentPlan && subscriptionStatus === "active"
                     ? "Plan actual"
-                    : isCurrentPlan && subscriptionStatus === "trialing"
-                      ? "Confirmar plan"
-                      : "Elegir plan"
+                    : redirecting && selectedPlan === plan.key
+                      ? "Redirigiendo a Mercado Pago…"
+                      : isCurrentPlan && subscriptionStatus === "trialing"
+                        ? "Pagar con Mercado Pago"
+                        : "Elegir plan"
                   }
+                  {!redirecting && !(isCurrentPlan && subscriptionStatus === "active") && (
+                    <ExternalLink className="ml-2 h-3.5 w-3.5" />
+                  )}
                 </Button>
               </CardContent>
             </Card>
@@ -426,130 +429,15 @@ export default function PlanPage() {
         })}
       </div>
 
-      {/* ─── Payment Form (mock) ─── */}
-      {showPaymentForm && selectedPlan && (
-        <Card className="border-2 border-primary/30 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Datos de pago
-            </CardTitle>
-            <CardDescription>
-              Ingresá tu tarjeta de crédito o débito.{" "}
-              {subscriptionStatus === "trialing" && daysLeft && daysLeft > 0
-                ? `Se cobrará ${formatPrice(selectedPlan)}/${billingCycle === "monthly" ? "mes" : "año"} cuando termine tu trial (en ${daysLeft} días).`
-                : `Se cobrará ${formatPrice(selectedPlan)}/${billingCycle === "monthly" ? "mes" : "año"} inmediatamente.`
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-1.5">Número de tarjeta</label>
-                <div className="relative">
-                  <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                    placeholder="4242 4242 4242 4242"
-                    className="pl-10"
-                    maxLength={19}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">Vencimiento</label>
-                <Input
-                  value={cardExpiry}
-                  onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
-                  placeholder="MM/YY"
-                  maxLength={5}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1.5">CVC</label>
-                <Input
-                  value={cardCvc}
-                  onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  placeholder="123"
-                  maxLength={4}
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium mb-1.5">Nombre en la tarjeta</label>
-                <Input
-                  value={cardName}
-                  onChange={(e) => setCardName(e.target.value)}
-                  placeholder="JUAN PEREZ"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-              <Lock className="h-4 w-4 shrink-0" />
-              <span>
-                Tu información de pago está protegida con encriptación de nivel bancario.
-                No almacenamos los datos completos de tu tarjeta.
-              </span>
-            </div>
-
-            {/* Resumen */}
-            <div className="rounded-lg border border-border bg-background p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Plan</span>
-                <span className="font-medium">
-                  {selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} ({billingCycle === "monthly" ? "Mensual" : "Anual"})
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Precio</span>
-                <span className="font-bold">{formatPrice(selectedPlan)}/{billingCycle === "monthly" ? "mes" : "año"}</span>
-              </div>
-              {subscriptionStatus === "trialing" && daysLeft && daysLeft > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Primer cobro</span>
-                  <span className="font-medium text-green-600 dark:text-green-400">
-                    <Sparkles className="inline h-3.5 w-3.5 mr-1" />
-                    En {daysLeft} días (gratis hasta entonces)
-                  </span>
-                </div>
-              )}
-              <hr className="my-2" />
-              <div className="flex justify-between text-sm font-bold">
-                <span>Hoy pagás</span>
-                <span className={subscriptionStatus === "trialing" && daysLeft && daysLeft > 0 ? "text-green-600 dark:text-green-400" : ""}>
-                  {subscriptionStatus === "trialing" && daysLeft && daysLeft > 0
-                    ? "USD 0 (trial activo)"
-                    : formatPrice(selectedPlan)
-                  }
-                </span>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowPaymentForm(false)}
-                className="flex-1"
-                disabled={saving}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleConfirm}
-                className="flex-1"
-                disabled={saving || !isCardValid}
-              >
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {subscriptionStatus === "trialing" && daysLeft && daysLeft > 0
-                  ? "Confirmar plan (cobro diferido)"
-                  : "Pagar y activar"
-                }
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Disclaimer de cotización */}
+      {rate && (
+        <p className="text-center text-xs text-muted-foreground mt-2">
+          Cotización usada: {rate.name} · venta ${rate.sell.toLocaleString("es-AR")} ·
+          actualizada {new Date(rate.updatedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}.
+          El monto exacto se fija al crear la suscripción en Mercado Pago.
+        </p>
       )}
+
     </div>
   );
 }

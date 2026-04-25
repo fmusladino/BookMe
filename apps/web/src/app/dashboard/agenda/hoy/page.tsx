@@ -46,7 +46,7 @@ interface TimeSlot {
 export default function HoyPage() {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const { appointments, loading, fetchAppointments, updateAppointment } = useAppointments();
+  const { appointments, loading, fetchAppointments, updateAppointment, invalidateCache } = useAppointments();
   const { config: scheduleConfig, workingHours, fetchScheduleConfig } = useScheduleConfig();
   const [expandedSlot, setExpandedSlot] = useState<string | null>(null);
 
@@ -274,7 +274,7 @@ export default function HoyPage() {
       <CreateAppointmentModal
         open={createModal.open}
         onOpenChange={(open) => setCreateModal({ open })}
-        onSuccess={() => loadDay(selectedDate)}
+        onSuccess={() => { invalidateCache(); loadDay(selectedDate); }}
         initialDate={selectedDate}
         initialTime={createModal.time}
       />

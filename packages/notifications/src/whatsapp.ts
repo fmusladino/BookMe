@@ -102,3 +102,58 @@ export async function sendCancellationWhatsApp(data: WhatsAppMessageData) {
     body: `❌ *Turno cancelado*\n\nHola ${data.patientName}, tu turno con *${data.professionalName}* del ${dateStr} fue cancelado.\n\nPodés reservar un nuevo turno desde bookme.ar\n\n_BookMe_`,
   });
 }
+
+// ─── Payment Reminder WhatsApp (impago de abono mensual) ───────────────────
+
+export type PaymentReminderKindWA = "soft" | "firm" | "final" | "read_only";
+
+export interface PaymentReminderWAData {
+  to: string;            // teléfono del profesional
+  professionalName: string;
+  amount: number;
+  currency: string;
+  daysOverdue: number;
+  retryUrl?: string;
+}
+
+/**
+ * Manda recordatorio de impago vía WhatsApp al profesional.
+ * El tono escala con el `kind` (soft → firm → final → read_only).
+ */
+export async function sendPaymentReminderWhatsApp(
+  kind: PaymentReminderKindWA,
+  data: PaymentReminderWAData
+) {
+  const url = data.retryUrl ?? "https://bookme.ar/dashboard/plan";
+  const amountStr = `${data.currency} ${data.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
+
+  let body: string;
+  switch (kind) {
+    case "soft":
+      body =
+        `💳 *Pago pendiente*\n\nHola ${data.professionalName}, no pudimos procesar tu abono mensual de ${amountStr}. ` +
+        `Revisá tu medio de pago para evitar inconvenientes:\n${url}\n\n_BookMe_`;
+      break;
+    case "firm":
+      body =
+        `⚠️ *Tu pago sigue pendiente*\n\nHola ${data.professionalName}, hace ${data.daysOverdue} días que no pudimos cobrar tu abono (${amountStr}). ` +
+        `Actualizá tu medio de pago acá:\n${url}\n\n_BookMe_`;
+      break;
+    case "final":
+      body =
+        `🚨 *Tu cuenta será suspendida en ${15 - data.daysOverdue} día(s)*\n\nHola ${data.professionalName}, esta es la última notificación. ` +
+        `Si no regularizás el pago de ${amountStr}, tu cuenta pasará a modo solo lectura.\n${url}\n\n_BookMe_`;
+      break;
+    case "read_only":
+      body =
+        `🔒 *Tu cuenta está en modo solo lectura*\n\nHola ${data.professionalName}, pasaron 15 días desde el fallo de cobro y tu cuenta fue congelada. ` +
+        `Tus pacientes ya no pueden reservar online. Reactivala regularizando el pago:\n${url}\n\n_BookMe_`;
+      break;
+  }
+
+  return getClient().messages.create({
+    from: FROM,
+    to: toWhatsAppNumber(data.to),
+    body,
+  });
+}

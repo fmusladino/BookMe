@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/security";
+import { getTrialEndsAt } from "@/lib/trial";
 
 // Schema base para todos los registros
 const baseSchema = z.object({
@@ -163,10 +164,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: msg }, { status: profileError.code === "23505" ? 409 : 500 });
     }
 
-    // 4a. Si es profesional, crear la fila en professionals con trial de 30 días
+    // 4a. Si es profesional, crear la fila en professionals con trial
     if (account_type === "professional" && line && specialty) {
-      const trialEnd = new Date();
-      trialEnd.setDate(trialEnd.getDate() + 30);
+      const trialEnd = getTrialEndsAt();
 
       const slug = full_name
         .toLowerCase()
@@ -228,10 +228,9 @@ export async function POST(request: NextRequest) {
       await admin.from("working_hours").insert(workingHours);
     }
 
-    // 4b. Si es canchas, crear la fila en court_owners con trial de 30 días
+    // 4b. Si es canchas, crear la fila en court_owners con trial
     if (account_type === "canchas" && business_name) {
-      const trialEnd = new Date();
-      trialEnd.setDate(trialEnd.getDate() + 30);
+      const trialEnd = getTrialEndsAt();
 
       // Generar slug público a partir del nombre del complejo
       const baseSlug = business_name

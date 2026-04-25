@@ -85,16 +85,36 @@ export async function POST(request: NextRequest) {
       };
     };
 
-    // Determinar plan según el preapproval_plan_id
-    const planId = subscription.preapproval_plan_id ?? "";
-    const resolvedPlan = MP_PLAN_MAP[planId] ?? "base";
+    // Determinar plan:
+    // 1. Si viene preapproval_plan_id (suscripción creada con template), usar MP_PLAN_MAP
+    // 2. Si no (creada con monto dinámico vía /create-checkout), parsear external_reference
+    //    formato: "bookme|<userId>|<plan>|<cycle>|<line>"
+    let resolvedPlan: SubscriptionPlan = "base";
+    let resolvedUserId: string | null = null;
+    let refBillingCycle: "monthly" | "annual" | null = null;
 
-    // Determinar billing cycle según frecuencia de MP
+    const planId = subscription.preapproval_plan_id ?? "";
+    if (planId && MP_PLAN_MAP[planId]) {
+      resolvedPlan = MP_PLAN_MAP[planId]!;
+    } else if (subscription.external_reference?.startsWith("bookme|")) {
+      const parts = subscription.external_reference.split("|");
+      // parts: ["bookme", userId, plan, cycle, line]
+      if (parts[2] === "base" || parts[2] === "standard" || parts[2] === "premium") {
+        resolvedPlan = parts[2];
+      }
+      if (parts[1]) resolvedUserId = parts[1];
+      if (parts[3] === "monthly" || parts[3] === "annual") refBillingCycle = parts[3];
+    }
+
+    // Determinar billing cycle:
+    // 1. Si external_reference lo trae, usarlo (más confiable)
+    // 2. Si no, derivar de auto_recurring
     const freqType = subscription.auto_recurring?.frequency_type;
     const billingCycle =
-      freqType === "months" && (subscription.auto_recurring?.frequency ?? 1) >= 12
+      refBillingCycle ??
+      (freqType === "months" && (subscription.auto_recurring?.frequency ?? 1) >= 12
         ? "annual"
-        : "monthly";
+        : "monthly");
 
     // Mapeo de estado MP → estado BookMe
     const statusMap: Record<
@@ -129,11 +149,83 @@ export async function POST(request: NextRequest) {
       updateData["data_retention_until"] = retentionDate.toISOString();
     }
 
-    // Actualizar estado del profesional
-    await supabase
-      .from("professionals")
-      .update(updateData)
-      .eq("mp_subscription_id", subscription.id);
+    // ─── Marcar past_due_since y registrar el payment ──────────────────
+    // Si pasa a past_due, dejamos `past_due_since` con el primer fallo del ciclo.
+    // Si vuelve a active, lo limpiamos (cobro regularizado) y marcamos el último
+    // payment como `paid`.
+    const now = new Date();
+    if (mapped.status === "past_due") {
+      // Solo setear past_due_since si todavía no estaba marcado (no pisar fechas previas)
+      const { data: currentPro } = await supabase
+        .from("professionals")
+        .select("past_due_since")
+        .eq("mp_subscription_id", subscription.id)
+        .maybeSingle();
+      if (!currentPro?.past_due_since) {
+        updateData["past_due_since"] = now.toISOString();
+      }
+    } else if (mapped.status === "active") {
+      updateData["past_due_since"] = null;
+    }
+
+    // Actualizar estado del profesional:
+    // preferimos matchear por mp_subscription_id (que grabamos al crear el
+    // preapproval), pero si no existe aún caemos al user_id del external_reference.
+    if (resolvedUserId) {
+      await supabase
+        .from("professionals")
+        .update(updateData)
+        .or(`mp_subscription_id.eq.${subscription.id},id.eq.${resolvedUserId}`);
+    } else {
+      await supabase
+        .from("professionals")
+        .update(updateData)
+        .eq("mp_subscription_id", subscription.id);
+    }
+
+    // Registrar el payment en histórico (para alimentar /admin/cobros y el cron)
+    if (resolvedUserId || subscription.id) {
+      // Buscar el id del profesional (necesitamos uuid, no mp_subscription_id)
+      let proId = resolvedUserId;
+      if (!proId) {
+        const { data: pro } = await supabase
+          .from("professionals")
+          .select("id")
+          .eq("mp_subscription_id", subscription.id)
+          .maybeSingle();
+        proId = pro?.id ?? null;
+      }
+
+      if (proId) {
+        const period = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
+        const paymentStatus =
+          subscription.status === "authorized" ? "paid" :
+          subscription.status === "paused"     ? "failed" : null;
+
+        if (paymentStatus) {
+          // Upsert por (professional_id, period_year, period_month) — máx 1 payment por mes.
+          // La UNIQUE INDEX uq_payments_pro_period garantiza idempotencia ante reentradas
+          // del webhook (MP puede reenviar el mismo evento varias veces).
+          await supabase
+            .from("payments")
+            .upsert(
+              {
+                professional_id: proId,
+                period_year: period.year,
+                period_month: period.month,
+                amount: 0, // amount real se setea al crear el preapproval; acá registramos el evento
+                currency: "ARS",
+                status: paymentStatus,
+                mp_subscription_id: subscription.id,
+                attempted_at: now.toISOString(),
+                paid_at: paymentStatus === "paid" ? now.toISOString() : null,
+                failure_reason: paymentStatus === "failed" ? "MercadoPago: subscription paused" : null,
+              },
+              { onConflict: "professional_id,period_year,period_month" }
+            );
+        }
+      }
+    }
 
     return NextResponse.json({ received: true });
   } catch (error) {

@@ -38,3 +38,6 @@ apps/web/.env.test.local
 .claude/
 .~lock.*#
 *.tsbuildinfo
+ 
+# Archivos temporales de sincronizacion 
+_tmp_* 

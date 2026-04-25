@@ -34,6 +34,7 @@ import {
   Dribbble,
   BookOpen,
   Compass,
+  AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -105,6 +106,7 @@ const NAV_SUPERADMIN: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: Shield },
   { label: "Usuarios", href: "/admin/usuarios", icon: Users },
   { label: "Planes", href: "/admin/planes", icon: CreditCard },
+  { label: "Cobros y Mora", href: "/admin/cobros", icon: AlertTriangle },
   { label: "Cartilla", href: "/admin/cartilla", icon: Globe },
   { label: "Cupones", href: "/admin/cupones", icon: ClipboardList },
   { label: "Métricas", href: "/admin/metricas", icon: BarChart3 },

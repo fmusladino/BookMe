@@ -105,7 +105,7 @@ export default function HomePage() {
                 href="/register"
                 className="group inline-flex items-center justify-center gap-2 rounded-lg bg-bookme-navy dark:bg-bookme-mint text-white dark:text-bookme-navy px-8 py-3.5 text-base font-semibold hover:shadow-xl hover:shadow-bookme-navy/30 dark:hover:shadow-bookme-mint/30 transition-all"
               >
-                Empezá gratis — 30 días
+                Empezá gratis — 7 días
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link
@@ -398,7 +398,7 @@ export default function HomePage() {
               Listo para probarlo?
             </h2>
             <p className="text-blue-200 mb-10 text-lg">
-              30 días gratis. Sin tarjeta. Cancelás cuando quieras.
+              7 días gratis. Sin tarjeta. Cancelás cuando quieras.
             </p>
             <Link
               href="/register"
