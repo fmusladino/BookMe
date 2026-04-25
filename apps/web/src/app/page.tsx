@@ -280,7 +280,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Three lines */}
+      {/* Two lines (Espacios & Canchas oculto temporalmente) */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4">
           <Reveal>
@@ -291,7 +291,7 @@ export default function HomePage() {
               <p className="text-muted-foreground">BookMe se adapta a tu rubro.</p>
             </div>
           </Reveal>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
             <Reveal delay={0}>
               <div className="group p-8 rounded-2xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50/70 to-cyan-50/70 dark:from-blue-950/40 dark:to-cyan-950/30 hover:shadow-xl hover:-translate-y-1 transition-all h-full">
                 <div className="inline-block px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-semibold mb-4">
@@ -326,30 +326,33 @@ export default function HomePage() {
               </div>
             </Reveal>
 
-            <Reveal delay={300}>
-              <div className="group p-8 rounded-2xl border-2 border-orange-200 dark:border-orange-800 bg-gradient-to-br from-orange-50/70 to-amber-50/70 dark:from-orange-950/40 dark:to-amber-950/30 hover:shadow-xl hover:-translate-y-1 transition-all h-full">
-                <div className="inline-block px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-xs font-semibold mb-4">
-                  Comercios
+            {/* Espacios & Canchas — oculto temporalmente, en construcción */}
+            {false && (
+              <Reveal delay={300}>
+                <div className="group p-8 rounded-2xl border-2 border-orange-200 dark:border-orange-800 bg-gradient-to-br from-orange-50/70 to-amber-50/70 dark:from-orange-950/40 dark:to-amber-950/30 hover:shadow-xl hover:-translate-y-1 transition-all h-full">
+                  <div className="inline-block px-3 py-1 rounded-full bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-xs font-semibold mb-4">
+                    Comercios
+                  </div>
+                  <h3 className="text-2xl font-bold text-foreground mb-4">Espacios & Canchas</h3>
+                  <ul className="space-y-3">
+                    {["Gestión de múltiples espacios", "Reserva online con seña integrada", "Canchas, restaurantes, bares", "Página pública shareable"].map((item) => (
+                      <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center gap-1.5 mt-6 text-sm font-semibold text-orange-600 dark:text-orange-400 hover:underline"
+                  >
+                    <Dribbble className="h-4 w-4" />
+                    Registrar mi complejo
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
                 </div>
-                <h3 className="text-2xl font-bold text-foreground mb-4">Espacios & Canchas</h3>
-                <ul className="space-y-3">
-                  {["Gestión de múltiples espacios", "Reserva online con seña integrada", "Canchas, restaurantes, bares", "Página pública shareable"].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <CheckCircle2 className="w-4 h-4 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/register"
-                  className="inline-flex items-center gap-1.5 mt-6 text-sm font-semibold text-orange-600 dark:text-orange-400 hover:underline"
-                >
-                  <Dribbble className="h-4 w-4" />
-                  Registrar mi complejo
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-            </Reveal>
+              </Reveal>
+            )}
           </div>
         </div>
       </section>
