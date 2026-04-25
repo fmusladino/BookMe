@@ -1,22 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import QRCode from "qrcode";
 import { useSession } from "@/hooks/use-session";
 import { Download, Copy, Check, QrCode, Printer, Smartphone } from "lucide-react";
-
-// ─── QR Code Generator (QR Code Model 2, Error Correction L) ────────
-// Implementación compacta sin dependencias externas
-
-// Constantes QR
-const EC_L = 1;
-const MODE_BYTE = 4;
-
-function generateQR(text: string): boolean[][] {
-  // Usamos un approach con la API de canvas + imagen externa para MVP
-  // Para producción se puede usar la lib 'qrcode'
-  // Por ahora delegamos al componente que usa un servicio inline
-  return [];
-}
 
 // ─── Componente principal ─────────────────────────────────────────────
 
@@ -32,42 +19,29 @@ export default function QRPage() {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://bookme.ar";
   const bookingUrl = `${baseUrl}/book/${slug}`;
 
-  // Generar QR usando canvas + algoritmo simple
+  // Generar QR localmente con la lib `qrcode` (sin dependencias externas)
   const drawQR = useCallback(() => {
     if (!slug || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Usar imagen desde Google Charts API como fallback simple para MVP
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(bookingUrl)}&format=png&margin=10`;
-
-    img.onload = () => {
-      canvas.width = qrSize;
-      canvas.height = qrSize;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, qrSize, qrSize);
-      ctx.drawImage(img, 0, 0, qrSize, qrSize);
-      setQrReady(true);
-    };
-
-    img.onerror = () => {
-      // Fallback: dibujar placeholder
-      canvas.width = qrSize;
-      canvas.height = qrSize;
-      ctx.fillStyle = "#f3f4f6";
-      ctx.fillRect(0, 0, qrSize, qrSize);
-      ctx.fillStyle = "#6b7280";
-      ctx.font = "14px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("Error generando QR", qrSize / 2, qrSize / 2);
-      setQrReady(false);
-    };
-
-    img.src = qrApiUrl;
+    QRCode.toCanvas(
+      canvas,
+      bookingUrl,
+      {
+        width: qrSize,
+        margin: 2,
+        errorCorrectionLevel: "M",
+        color: { dark: "#000000", light: "#ffffff" },
+      },
+      (err) => {
+        if (err) {
+          console.error("[qr] error generando:", err);
+          setQrReady(false);
+          return;
+        }
+        setQrReady(true);
+      },
+    );
   }, [slug, bookingUrl, qrSize]);
 
   useEffect(() => {
@@ -142,7 +116,7 @@ export default function QRPage() {
     ctx.fillText(bookingUrl, totalWidth / 2, qrSize + padding + 40);
 
     // Nombre del profesional
-    const profName = user?.profile?.full_name ?? slug;
+    const profName = user?.full_name ?? slug;
     ctx.fillStyle = "#1e3a5f";
     ctx.font = "bold 15px system-ui, -apple-system, sans-serif";
     ctx.fillText(profName, totalWidth / 2, qrSize + padding + 62);
@@ -162,7 +136,7 @@ export default function QRPage() {
   const handlePrint = () => {
     if (!canvasRef.current || !qrReady) return;
 
-    const profName = user?.profile?.full_name ?? slug;
+    const profName = user?.full_name ?? slug;
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
