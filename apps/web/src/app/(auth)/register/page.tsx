@@ -228,7 +228,7 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Profesional */}
               <button
                 onClick={() => setAccountType("professional")}
@@ -267,24 +267,26 @@ export default function RegisterPage() {
                 </span>
               </button>
 
-              {/* Canchas */}
-              <button
-                onClick={() => setAccountType("canchas")}
-                className="group relative flex flex-col items-center gap-3 rounded-xl border-2 border-border bg-background p-6 text-center transition-all hover:border-orange-500 hover:bg-orange-50/50 hover:shadow-md dark:hover:border-orange-400 dark:hover:bg-orange-950/30"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/50 transition-colors group-hover:bg-orange-200 dark:group-hover:bg-orange-900">
-                  <Store className="h-7 w-7 text-orange-600 dark:text-orange-400" />
-                </div>
-                <div>
-                  <p className="font-semibold text-foreground">Tengo un Comercio</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Canchas, restaurantes, bares y más
-                  </p>
-                </div>
-                <span className="inline-flex items-center text-xs font-medium text-orange-600 dark:text-orange-400">
-                  7 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
-                </span>
-              </button>
+              {/* Canchas — oculto temporalmente, en construcción */}
+              {false && (
+                <button
+                  onClick={() => setAccountType("canchas")}
+                  className="group relative flex flex-col items-center gap-3 rounded-xl border-2 border-border bg-background p-6 text-center transition-all hover:border-orange-500 hover:bg-orange-50/50 hover:shadow-md dark:hover:border-orange-400 dark:hover:bg-orange-950/30"
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/50 transition-colors group-hover:bg-orange-200 dark:group-hover:bg-orange-900">
+                    <Store className="h-7 w-7 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">Tengo un Comercio</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Canchas, restaurantes, bares y más
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center text-xs font-medium text-orange-600 dark:text-orange-400">
+                    7 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
+                  </span>
+                </button>
+              )}
             </div>
 
             <div className="text-center text-sm">
