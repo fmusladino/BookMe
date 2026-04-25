@@ -2,15 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/reminders",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/trial-emails",
       "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/gcal-refresh",
-      "schedule": "0 3 * * *"
     },
     {
       "path": "/api/cron/billing-reminders",
