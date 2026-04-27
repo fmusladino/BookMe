@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
-import { SLOT_DURATIONS as DURATION_PRESETS } from "@/lib/constants";
 
 interface Insurance {
   id: string;
@@ -39,7 +38,6 @@ interface Service {
 interface CreateServiceForm {
   name: string;
   description: string;
-  duration_minutes: string;
   price: string;
   show_price: boolean;
   modality: "presencial" | "virtual" | "both";
@@ -59,7 +57,6 @@ export default function ServiciosPage() {
   const emptyForm: CreateServiceForm = {
     name: "",
     description: "",
-    duration_minutes: "30",
     price: "",
     show_price: false,
     modality: "presencial",
@@ -101,7 +98,7 @@ export default function ServiciosPage() {
   }, [fetchServices, fetchInsurances, isHealthcare]);
 
   const handleCreateService = async () => {
-    if (!createForm.name || !createForm.duration_minutes) {
+    if (!createForm.name) {
       toast.error("Por favor completá los campos requeridos");
       return;
     }
@@ -115,7 +112,6 @@ export default function ServiciosPage() {
           body: JSON.stringify({
             name: createForm.name,
             description: createForm.description || null,
-            duration_minutes: parseInt(createForm.duration_minutes, 10),
             price: createForm.price ? parseFloat(createForm.price) : null,
             show_price: createForm.show_price,
             modality: createForm.modality,
@@ -132,7 +128,7 @@ export default function ServiciosPage() {
         const payload = {
           name: createForm.name,
           description: createForm.description || null,
-          duration_minutes: parseInt(createForm.duration_minutes, 10),
+          // duration_minutes se hereda del slot_duration de la agenda en el backend
           price: createForm.price ? parseFloat(createForm.price) : undefined,
           show_price: createForm.show_price,
           modality: createForm.modality,
@@ -311,7 +307,6 @@ export default function ServiciosPage() {
                       setCreateForm({
                         name: service.name,
                         description: service.description || "",
-                        duration_minutes: String(service.duration_minutes),
                         price: service.price ? String(service.price) : "",
                         show_price: service.show_price,
                         modality: service.modality || "presencial",
@@ -397,43 +392,6 @@ export default function ServiciosPage() {
               <p className="text-xs text-muted-foreground text-right">
                 {createForm.description.length}/500
               </p>
-            </div>
-
-            {/* ── Duración ───────────────────────────────────── */}
-            <div className="space-y-3">
-              <Label className="text-sm font-semibold">Duración *</Label>
-              <div className="flex flex-wrap gap-2">
-                {DURATION_PRESETS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() =>
-                      setCreateForm((f) => ({ ...f, duration_minutes: String(d) }))
-                    }
-                    className={`rounded-lg border px-4 py-2.5 text-sm font-medium transition-all ${
-                      createForm.duration_minutes === String(d)
-                        ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
-                        : "border-border hover:bg-accent hover:border-accent-foreground/20"
-                    }`}
-                  >
-                    {d} min
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Otra duración:</span>
-                <Input
-                  type="number"
-                  min="5"
-                  max="480"
-                  value={createForm.duration_minutes}
-                  onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, duration_minutes: e.target.value }))
-                  }
-                  className="w-24 h-9"
-                />
-                <span className="text-xs text-muted-foreground">minutos</span>
-              </div>
             </div>
 
             {/* ── Modalidad ──────────────────────────────────── */}
@@ -651,7 +609,7 @@ export default function ServiciosPage() {
               </Button>
               <Button
                 onClick={handleCreateService}
-                disabled={saving || !createForm.name || !createForm.duration_minutes}
+                disabled={saving || !createForm.name}
                 className="flex-1 h-11"
               >
                 {saving ? (

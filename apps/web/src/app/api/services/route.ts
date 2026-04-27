@@ -5,7 +5,8 @@ import { z } from "zod";
 const createServiceSchema = z.object({
   name: z.string().min(2, "Nombre requerido"),
   description: z.string().max(500).optional().nullable(),
-  duration_minutes: z.number().min(5).max(480),
+  // Si no se envía, se hereda del slot_duration de la agenda (schedule_configs).
+  duration_minutes: z.number().min(5).max(480).optional(),
   price: z.number().min(0).optional().nullable(),
   show_price: z.boolean().optional(),
   modality: z.enum(["presencial", "virtual", "both"]).optional().default("presencial"),
@@ -72,12 +73,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { insurance_ids, ...serviceData } = parsed.data;
+    const { insurance_ids, duration_minutes, ...serviceData } = parsed.data;
+
+    // La duración se hereda de la agenda si no viene en el body.
+    let resolvedDuration = duration_minutes;
+    if (resolvedDuration === undefined) {
+      const { data: scheduleConfig } = await supabase
+        .from("schedule_configs")
+        .select("slot_duration")
+        .eq("professional_id", user.id)
+        .single();
+      resolvedDuration = scheduleConfig?.slot_duration ?? 30;
+    }
 
     const { data, error } = await supabase
       .from("services")
       .insert({
         professional_id: user.id,
+        duration_minutes: resolvedDuration,
         ...serviceData,
       })
       .select()
