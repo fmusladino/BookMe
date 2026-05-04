@@ -258,7 +258,7 @@ export default function NotasPage() {
         <div className="rounded-lg border border-dashed border-border bg-card/50 p-12 text-center">
           <Calendar className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
           <p className="text-muted-foreground">
-            No hay notas de sesión para este cliente
+            No hay notas registradas para este paciente
           </p>
           <Button onClick={handleNewNote} variant="outline" className="mt-4">
             Crear primera nota

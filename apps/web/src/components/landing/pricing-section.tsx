@@ -17,7 +17,7 @@ const HC_PLANS = [
   {
     key: "standard",
     name: "Standard",
-    features: ["Todo en Base", "Historia clínica AES-256", "Dashboard financiero", "Push notifications"],
+    features: ["Todo en Base", "Notas por paciente", "Dashboard financiero", "Push notifications"],
     highlight: true,
   },
   {

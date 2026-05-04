@@ -267,30 +267,9 @@ export default function PacientesPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch(`/api/clinical-records?patient_id=${patient.id}`);
-                        if (!res.ok) {
-                          router.push(`/dashboard/pacientes/${patient.id}/historia-clinica`);
-                          return;
-                        }
-                        const data = (await res.json()) as { records?: unknown[] };
-                        if (!data.records || data.records.length === 0) {
-                          toast.info(`${patient.full_name} no posee historia clínica. Podés crear la primera entrada desde la vista de HC.`, {
-                            action: {
-                              label: "Ir a HC",
-                              onClick: () => router.push(`/dashboard/pacientes/${patient.id}/historia-clinica`),
-                            },
-                          });
-                        } else {
-                          router.push(`/dashboard/pacientes/${patient.id}/historia-clinica`);
-                        }
-                      } catch {
-                        router.push(`/dashboard/pacientes/${patient.id}/historia-clinica`);
-                      }
-                    }}
+                    onClick={() => router.push(`/dashboard/pacientes/${patient.id}/notas`)}
                     className="rounded-md p-2 text-muted-foreground hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-900/20 transition-colors"
-                    title="Historia clínica"
+                    title="Notas"
                   >
                     <FileText className="h-4 w-4" />
                   </button>

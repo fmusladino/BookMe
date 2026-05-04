@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     template: "%s | BookMe",
   },
   description:
-    "La plataforma de gestión de turnos para profesionales y negocios en LATAM. Agenda, recordatorios, historia clínica y más.",
+    "La plataforma de gestión de turnos para profesionales y negocios en LATAM. Agenda, recordatorios, notas por paciente y más.",
   keywords: ["turnos", "agenda", "médicos", "profesionales", "LATAM"],
   authors: [{ name: "BookMe", url: "https://bookme.ar" }],
   creator: "BookMe",

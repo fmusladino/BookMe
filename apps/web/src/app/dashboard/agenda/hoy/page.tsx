@@ -448,13 +448,13 @@ export default function HoyPage() {
                     {/* Acciones rápidas */}
                     {apt.status !== "cancelled" && apt.status !== "completed" && (
                       <div className="flex flex-wrap gap-1.5">
-                        {/* Botón ATENDER — abre Historia Clínica del paciente */}
+                        {/* Botón ATENDER — abre las notas del paciente */}
                         <Button
                           size="sm"
                           className="h-7 text-xs bg-teal-600 hover:bg-teal-700"
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/dashboard/pacientes/${apt.patient.id}/historia-clinica`);
+                            router.push(`/dashboard/pacientes/${apt.patient.id}/notas`);
                           }}
                         >
                           <Stethoscope className="mr-1 h-3 w-3" />

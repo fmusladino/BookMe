@@ -39,7 +39,7 @@ const HC_PLANS: PlanDef[] = [
   {
     key: "standard",
     name: "Standard",
-    features: ["Todo en Base", "Historia clínica AES-256", "Dashboard financiero", "Push notifications", "MIA básica"],
+    features: ["Todo en Base", "Notas por paciente", "Dashboard financiero", "Push notifications", "MIA básica"],
     highlight: true,
   },
   {

@@ -14,9 +14,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  FileText,
-  Download,
-  ShieldCheck,
   Video,
 } from "lucide-react";
 import Link from "next/link";
@@ -38,21 +35,10 @@ interface Appointment {
   };
 }
 
-interface PatientRecord {
-  id: string;
-  professional_id: string;
-  professionalName: string;
-  professionalSpecialty: string;
-  recordCount: number;
-}
-
 export default function MisTurnosPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patientRecordsInfo, setPatientRecordsInfo] = useState<PatientRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
-  const [exportingHC, setExportingHC] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"turnos" | "historia">("turnos");
   const supabase = createClient();
 
   useEffect(() => {
@@ -86,33 +72,6 @@ export default function MisTurnosPage() {
         setAppointments([]);
       }
 
-      // Obtener info de historia clínica via API (admin client, sin RLS)
-      try {
-        const hcRes = await fetch("/api/clinical-records/patient-info");
-        if (hcRes.ok) {
-          const hcData = (await hcRes.json()) as {
-            professionals: Array<{
-              patient_id: string;
-              professional_id: string;
-              professional_name: string;
-              professional_specialty: string;
-              record_count: number;
-            }>;
-          };
-          setPatientRecordsInfo(
-            hcData.professionals.map((p) => ({
-              id: p.patient_id,
-              professional_id: p.professional_id,
-              professionalName: p.professional_name,
-              professionalSpecialty: p.professional_specialty,
-              recordCount: p.record_count,
-            }))
-          );
-        }
-      } catch (hcErr) {
-        console.error("Error obteniendo info HC:", hcErr);
-      }
-
       setLoading(false);
     };
 
@@ -122,40 +81,6 @@ export default function MisTurnosPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = "/";
-  };
-
-  // Descargar HC completa como PDF
-  const handleDownloadHC = async (patientId: string) => {
-    setExportingHC(patientId);
-    try {
-      const params = new URLSearchParams({
-        patient_id: patientId,
-        role: "patient",
-      });
-      const res = await fetch(`/api/clinical-records/export?${params.toString()}`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Error desconocido" })) as { error?: string; detail?: string };
-        const msg = [data.error, data.detail].filter(Boolean).join(": ");
-        throw new Error(msg || "Error al descargar");
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ||
-        "historia_clinica.pdf";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Error descargando HC:", error);
-      alert(error instanceof Error ? error.message : "Error al descargar la historia clínica");
-    } finally {
-      setExportingHC(null);
-    }
   };
 
   const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -231,116 +156,13 @@ export default function MisTurnosPage() {
         <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
           Mi portal
         </h1>
-        <p className="text-muted-foreground mb-4">
-          Consultá tus turnos y descargá tu historia clínica.
+        <p className="text-muted-foreground mb-8">
+          Consultá tus turnos.
         </p>
-
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-border mb-8">
-          <button
-            onClick={() => setActiveTab("turnos")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "turnos"
-                ? "border-bookme-navy dark:border-bookme-mint text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Mis turnos
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab("historia")}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === "historia"
-                ? "border-bookme-navy dark:border-bookme-mint text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Mi historia clínica
-            </span>
-          </button>
-        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-bookme-navy dark:text-bookme-mint" />
-          </div>
-        ) : activeTab === "historia" ? (
-          /* === TAB: Historia Clínica === */
-          <div className="space-y-6">
-            {patientRecordsInfo.length === 0 ? (
-              <div className="text-center py-20">
-                <FileText className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-foreground mb-2">
-                  No tenés historia clínica disponible
-                </h2>
-                <p className="text-muted-foreground">
-                  Tu profesional todavía no cargó registros clínicos.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-4">
-                  <div className="flex items-start gap-3">
-                    <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                        Tu historia clínica es confidencial
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                        Según la Ley 26.529, tenés derecho a recibir una copia de tu historia
-                        clínica. Los registros se almacenan encriptados y solo se desencriptan
-                        al momento de la descarga.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {patientRecordsInfo.map((pr) => (
-                    <div
-                      key={`${pr.id}-${pr.professional_id}`}
-                      className="p-5 rounded-lg border border-border bg-card"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                            <User className="w-5 h-5 text-muted-foreground" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-foreground">
-                              {pr.professionalName}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {pr.professionalSpecialty}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {pr.recordCount} {pr.recordCount === 1 ? "registro" : "registros"} clínicos
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleDownloadHC(pr.id)}
-                          disabled={exportingHC === pr.id}
-                          className="flex items-center gap-2 rounded-md bg-bookme-navy dark:bg-bookme-mint text-white dark:text-bookme-navy px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-                        >
-                          {exportingHC === pr.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Download className="w-4 h-4" />
-                          )}
-                          Descargar PDF
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
           </div>
         ) : appointments.length === 0 ? (
           <div className="text-center py-20">

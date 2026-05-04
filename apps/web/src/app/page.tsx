@@ -231,7 +231,7 @@ export default function HomePage() {
               { icon: Bell, title: "Recordatorios automáticos", description: "Email + WhatsApp al confirmar, 24hs antes y 5 min antes del turno virtual.", gradient: "from-amber-500/10 to-orange-500/10", iconBg: "from-amber-500 to-orange-500" },
               { icon: Sparkles, title: "MIA — Asistente IA", description: "Hablale con voz o texto: 'agendame a Juan mañana 15hs'. Ella se encarga.", gradient: "from-fuchsia-500/10 to-violet-500/10", iconBg: "from-fuchsia-500 to-violet-500" },
               { icon: MapPin, title: "Directorio geolocalizado", description: "Aparecé en búsquedas de Google. Páginas SEO por ciudad y especialidad.", gradient: "from-rose-500/10 to-red-500/10", iconBg: "from-rose-500 to-red-500" },
-              { icon: Shield, title: "Historia clínica AES-256", description: "Encriptada en reposo. Cumple con Ley 26.529 de datos médicos.", gradient: "from-slate-500/10 to-gray-500/10", iconBg: "from-slate-600 to-gray-700" },
+              { icon: Shield, title: "Notas por paciente", description: "Registrá observaciones de cada turno. Privadas, accesibles solo para vos.", gradient: "from-slate-500/10 to-gray-500/10", iconBg: "from-slate-600 to-gray-700" },
               { icon: CreditCard, title: "Facturación integrada", description: "Liquidación a obras sociales y facturación AFIP vía Facturante.", gradient: "from-indigo-500/10 to-blue-500/10", iconBg: "from-indigo-500 to-blue-500" },
               { icon: Smartphone, title: "PWA instalable", description: "Instalá BookMe en tu celular. Push notifications y dark mode incluidos.", gradient: "from-lime-500/10 to-green-500/10", iconBg: "from-lime-500 to-green-500" },
             ].map((feature, i) => (
@@ -299,7 +299,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-2xl font-bold text-foreground mb-4">Healthcare</h3>
                 <ul className="space-y-3">
-                  {["Historia clínica digital encriptada", "Liquidación a obras sociales", "Receta electrónica (próx.)", "Gestión de pacientes con DNI"].map((item) => (
+                  {["Notas privadas por paciente", "Liquidación a obras sociales", "Receta electrónica (próx.)", "Gestión de pacientes con DNI"].map((item) => (
                     <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
                       <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
                       {item}

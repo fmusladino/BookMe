@@ -187,11 +187,11 @@ export function EditAppointmentModal({
               className="gap-2"
               onClick={() => {
                 onOpenChange(false);
-                router.push(`/dashboard/pacientes/${appointment.patient_id}/historia-clinica`);
+                router.push(`/dashboard/pacientes/${appointment.patient_id}/notas`);
               }}
             >
               <FileText className="h-4 w-4" />
-              Historia Clínica
+              Notas
             </Button>
           </div>
         </div>

@@ -122,21 +122,21 @@ const faqCategories: FaqCategory[] = [
     ],
   },
   {
-    id: "hc",
+    id: "notas",
     icon: FileText,
-    title: "Historia clínica y notas",
+    title: "Notas por paciente",
     questions: [
       {
-        q: "¿La historia clínica es segura?",
-        a: "Sí. Cada registro está encriptado con AES-256 antes de guardarse en la base de datos. Solo vos, como profesional tratante, podés ver y editar las historias de tus pacientes.",
+        q: "¿Qué son las notas?",
+        a: "Son anotaciones de texto libre que podés agregar a cada turno o paciente. Te sirven para registrar observaciones, indicaciones o recordatorios entre consultas.",
       },
       {
-        q: "¿Qué son las notas de sesión?",
-        a: "Son anotaciones de texto libre que podés agregar a cada turno. Están disponibles tanto en la línea Salud como en la de Negocios (ej: un peluquero puede anotar el tipo de corte).",
+        q: "¿Quién puede ver mis notas?",
+        a: "Solo vos. Las notas son privadas del profesional que las crea — los pacientes no pueden verlas desde su panel.",
       },
       {
-        q: "¿Mis pacientes pueden ver la historia clínica?",
-        a: "No. La historia clínica solo es visible y editable por el profesional que la creó. El paciente puede ver sus turnos y descargar indicaciones cuando estén disponibles (V2).",
+        q: "¿BookMe guarda historia clínica?",
+        a: "No. BookMe es una herramienta de gestión de turnos y notas internas. No es un sistema de historia clínica formal y no reemplaza las obligaciones de registro establecidas por la Ley 26.529 cuando correspondan.",
       },
     ],
   },
