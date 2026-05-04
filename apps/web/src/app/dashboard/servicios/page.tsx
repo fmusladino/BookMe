@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
+import { useAccountLocked } from "@/hooks/use-account-lock";
 
 interface Insurance {
   id: string;
@@ -46,6 +47,7 @@ interface CreateServiceForm {
 
 export default function ServiciosPage() {
   const { user } = useSession();
+  const { isLocked, message: lockMessage } = useAccountLocked();
   const isHealthcare = user?.professional?.line === "healthcare";
   const [services, setServices] = useState<Service[]>([]);
   const [insurances, setInsurances] = useState<Insurance[]>([]);
@@ -194,7 +196,11 @@ export default function ServiciosPage() {
             Configurá los tipos de consulta y sus precios
           </p>
         </div>
-        <Button onClick={() => setCreateModalOpen(true)}>
+        <Button
+          onClick={() => setCreateModalOpen(true)}
+          disabled={isLocked}
+          title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Nuevo servicio
         </Button>
@@ -302,6 +308,8 @@ export default function ServiciosPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={isLocked}
+                    title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
                     onClick={() => {
                       setEditingService(service);
                       setCreateForm({
@@ -322,6 +330,8 @@ export default function ServiciosPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={isLocked}
+                    title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
                     onClick={() => handleDeleteService(service.id)}
                     className="flex-1"
                   >

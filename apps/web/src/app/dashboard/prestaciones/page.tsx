@@ -26,6 +26,7 @@ import { Select } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
+import { useAccountLocked } from "@/hooks/use-account-lock";
 
 // ─── Types ──────────────────────────────────────────────────
 interface Insurance {
@@ -97,6 +98,7 @@ const formatCurrency = (v: number) =>
 // ─── Component ──────────────────────────────────────────────
 export default function PrestacionesPage() {
   const { user, loading: userLoading } = useSession();
+  const { isLocked, message: lockMessage } = useAccountLocked();
   const [prestaciones, setPrestaciones] = useState<Prestacion[]>([]);
   const [insurances, setInsurances] = useState<Insurance[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -314,7 +316,12 @@ export default function PrestacionesPage() {
             Cargá y gestioná tus prestaciones por obra social o prepaga
           </p>
         </div>
-        <Button onClick={openCreate} className="gap-2">
+        <Button
+          onClick={openCreate}
+          disabled={isLocked}
+          title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
+          className="gap-2"
+        >
           <Plus className="h-4 w-4" />
           Nueva Prestación
         </Button>
@@ -586,8 +593,9 @@ export default function PrestacionesPage() {
                         variant="ghost"
                         size="sm"
                         className="h-8 w-8 p-0"
+                        disabled={isLocked}
                         onClick={() => openEdit(p)}
-                        title="Editar"
+                        title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : "Editar"}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -596,8 +604,9 @@ export default function PrestacionesPage() {
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                          disabled={isLocked}
                           onClick={() => handleDelete(p.id)}
-                          title="Desactivar"
+                          title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : "Desactivar"}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -606,8 +615,9 @@ export default function PrestacionesPage() {
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0 text-green-500 hover:text-green-700"
+                          disabled={isLocked}
                           onClick={() => handleReactivate(p.id)}
-                          title="Reactivar"
+                          title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : "Reactivar"}
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         </Button>
