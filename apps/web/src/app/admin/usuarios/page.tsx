@@ -704,7 +704,7 @@ export default function UsuariosPage() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-1.5">
                         El plan determina las funcionalidades disponibles y el precio de suscripción.
-                        {formData.subscription_plan !== "free" && " Se iniciará un trial de 30 días."}
+                        {formData.subscription_plan !== "free" && " Se iniciará un trial de 7 días."}
                       </p>
                     </div>
                   </>

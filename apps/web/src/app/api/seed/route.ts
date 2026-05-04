@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getTrialEndsAt } from "@/lib/trial";
 
 // POST /api/seed
 // Crea un usuario profesional de prueba para desarrollo.
@@ -57,9 +58,8 @@ export async function POST() {
       phone: "+5491112345678",
     }, { onConflict: "id" });
 
-    // Crear profesional
-    const trialEnd = new Date();
-    trialEnd.setDate(trialEnd.getDate() + 30);
+    // Crear profesional con trial de TRIAL_DAYS (7) días
+    const trialEnd = getTrialEndsAt();
 
     await supabase.from("professionals").upsert({
       id: userId,

@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { z } from "zod";
 import { verifyAdminAuth } from "../_lib/auth";
 import type { UserRole, SubscriptionPlan } from "@/types";
+import { getTrialEndsAt } from "@/lib/trial";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────
 
@@ -243,9 +244,9 @@ export async function POST(request: NextRequest) {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
 
-      // Trial de 30 días si el plan no es free
+      // Trial de TRIAL_DAYS (7) días si el plan no es free
       const trialEndsAt = plan !== "free"
-        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        ? getTrialEndsAt().toISOString()
         : null;
 
       const { error: profError } = await admin.from("professionals").insert({
@@ -347,7 +348,7 @@ export async function POST(request: NextRequest) {
         billing_cycle: cycle,
         price_cents: priceMap[plan][cycle],
         status: "trialing",
-        trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        trial_ends_at: getTrialEndsAt().toISOString(),
         features_level: plan === "large" ? "premium" : "standard",
       });
 
