@@ -4,6 +4,7 @@ import type { AppointmentStatus } from "@/types";
 import { z } from "zod";
 import { validateAppointmentSlot } from "@/lib/schedule/validation";
 import { sendBookingConfirmation, getNotificationContext, sendPushToProNewBooking } from "@/lib/notifications/send";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 // Import dinámico para no romper si googleapis no está instalado
 const syncAppointmentCreated = async (appointmentId: string) => {
   try {
@@ -80,6 +81,9 @@ export async function GET(request: NextRequest) {
 // POST /api/appointments — Crear turno con verificación de solapamiento
 export async function POST(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 

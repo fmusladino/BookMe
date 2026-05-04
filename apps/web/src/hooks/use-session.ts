@@ -10,6 +10,10 @@ export interface SubscriptionInfo {
   subscriptionExpiresAt?: string | null;
   cancelledAt?: string | null;
   cancellationReason?: string | null;
+  /** True cuando la cuenta está en modo solo lectura (trial expirado, impago o cancelada). */
+  isLocked?: boolean;
+  lockReason?: "trial_expired" | "past_due" | "cancelled" | "expired" | null;
+  lockMessage?: string | null;
 }
 
 export interface SessionUser {

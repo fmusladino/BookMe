@@ -14,6 +14,7 @@ import { parseICS } from "@/lib/importers/parse-ics";
 import type { ImportResult, ImportError, ParsedAppointment, ImportFileType } from "@/lib/importers/types";
 import { validateAppointmentSlot } from "@/lib/schedule/validation";
 import { randomUUID } from "crypto";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 /**
  * Detecta el tipo de archivo a partir de su extensión
@@ -128,6 +129,9 @@ async function findService(
  */
 export async function POST(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     // Verifica autenticación
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();

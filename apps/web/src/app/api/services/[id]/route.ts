@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 const updateServiceSchema = z.object({
   name: z.string().min(2).optional(),
@@ -67,6 +68,9 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const { id } = await context.params;
     const supabase = await createClient();
     const {
@@ -176,6 +180,9 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const { id } = await context.params;
     const supabase = await createClient();
     const {

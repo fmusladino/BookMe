@@ -27,6 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAccountLocked } from "@/hooks/use-account-lock";
 
 interface SessionNote {
   id: string;
@@ -48,6 +49,7 @@ export default function NotasPage() {
   const params = useParams();
   const router = useRouter();
   const patientId = params.id as string;
+  const { isLocked, message: lockMessage } = useAccountLocked();
 
   // Estados
   const [notes, setNotes] = useState<SessionNote[]>([]);
@@ -242,7 +244,9 @@ export default function NotasPage() {
         </div>
         <button
           onClick={handleNewNote}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+          disabled={isLocked}
+          title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
+          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="h-4 w-4" />
           Nueva nota
@@ -260,7 +264,13 @@ export default function NotasPage() {
           <p className="text-muted-foreground">
             No hay notas registradas para este paciente
           </p>
-          <Button onClick={handleNewNote} variant="outline" className="mt-4">
+          <Button
+            onClick={handleNewNote}
+            disabled={isLocked}
+            title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
+            variant="outline"
+            className="mt-4"
+          >
             Crear primera nota
           </Button>
         </div>
@@ -288,16 +298,17 @@ export default function NotasPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleEdit(note)}
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                    title="Editar nota"
+                    disabled={isLocked}
+                    title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : "Editar nota"}
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => handleDeleteClick(note)}
-                    disabled={deleting === note.id}
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
-                    title="Eliminar nota"
+                    disabled={deleting === note.id || isLocked}
+                    title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : "Eliminar nota"}
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {deleting === note.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

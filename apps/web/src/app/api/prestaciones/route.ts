@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 const createPrestacionSchema = z.object({
   insurance_id: z.string().uuid("Obra social inválida"),
@@ -61,6 +62,9 @@ export async function GET(request: NextRequest) {
 // POST /api/prestaciones — Crear prestación
 export async function POST(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const {
       data: { user },

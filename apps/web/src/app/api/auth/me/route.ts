@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { isAccountLocked, getLockReason } from "@/lib/subscriptions/lock";
 
 // Forzar que esta ruta sea siempre dinámica (sin cache)
 export const dynamic = "force-dynamic";
@@ -77,6 +78,13 @@ export async function GET() {
         daysUntilTrialEnd = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
       }
 
+      const lockable = {
+        status: subscriptionSource.subscription_status,
+        trial_ends_at: subscriptionSource.trial_ends_at,
+      };
+      const locked = isAccountLocked(lockable);
+      const lockReason = locked ? getLockReason(lockable) : null;
+
       subscription = {
         plan: subscriptionSource.subscription_plan || "free",
         status: subscriptionSource.subscription_status || "trialing",
@@ -85,6 +93,9 @@ export async function GET() {
         subscriptionExpiresAt: (subscriptionSource as { subscription_expires_at?: string | null }).subscription_expires_at ?? null,
         cancelledAt: (subscriptionSource as { cancelled_at?: string | null }).cancelled_at ?? null,
         cancellationReason: (subscriptionSource as { cancellation_reason?: string | null }).cancellation_reason ?? null,
+        isLocked: locked,
+        lockReason: lockReason?.reason ?? null,
+        lockMessage: lockReason?.message ?? null,
       };
     }
 

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 /**
  * GET /api/professionals/me/insurances
@@ -85,6 +86,9 @@ const addInsuranceSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const {
       data: { user },
@@ -204,6 +208,9 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const {
       data: { user },

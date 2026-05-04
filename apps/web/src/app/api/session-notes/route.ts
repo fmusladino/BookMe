@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 // Validación para crear una nota de sesión
 const createSessionNoteSchema = z.object({
@@ -85,6 +86,9 @@ export async function GET(request: NextRequest) {
 // POST /api/session-notes — Crear una nota de sesión
 export async function POST(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const {
       data: { user },

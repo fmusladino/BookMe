@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Search, Phone, Mail, X, Loader2, Edit, Trash2, FileText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useAccountLocked } from "@/hooks/use-account-lock";
 
 interface Patient {
   id: string;
@@ -38,6 +39,7 @@ const EMPTY_FORM = {
 
 export default function PacientesPage() {
   const router = useRouter();
+  const { isLocked, message: lockMessage } = useAccountLocked();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [insurances, setInsurances] = useState<Insurance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,7 +189,9 @@ export default function PacientesPage() {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
+          disabled={isLocked}
+          title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
+          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="h-4 w-4" />
           Nuevo paciente
@@ -221,7 +225,9 @@ export default function PacientesPage() {
           {!search && (
             <button
               onClick={openCreate}
-              className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              disabled={isLocked}
+              title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
+              className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="h-4 w-4" />
               Crear primer paciente
@@ -275,15 +281,17 @@ export default function PacientesPage() {
                   </button>
                   <button
                     onClick={() => openEdit(patient)}
-                    className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                    title="Editar"
+                    disabled={isLocked}
+                    title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : "Editar"}
+                    className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Edit className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(patient.id, patient.full_name)}
-                    className="rounded-md p-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 transition-colors"
-                    title="Eliminar"
+                    disabled={isLocked}
+                    title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : "Eliminar"}
+                    className="rounded-md p-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

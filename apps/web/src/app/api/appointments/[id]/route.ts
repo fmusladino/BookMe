@@ -8,6 +8,7 @@ import {
   sendCancellationNotification,
   getNotificationContext,
 } from "@/lib/notifications/send";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 // Imports dinámicos para no romper si googleapis no está instalado
 const syncAppointmentUpdated = async (appointmentId: string) => {
   try {
@@ -80,6 +81,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -214,6 +218,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 

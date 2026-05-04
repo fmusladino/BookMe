@@ -37,6 +37,7 @@ import type { AppointmentWithRelations } from "@/types";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { CreateAppointmentModal } from "@/components/agenda/create-appointment-modal";
+import { useAccountLocked } from "@/hooks/use-account-lock";
 
 interface TimeSlot {
   time: string;
@@ -45,6 +46,7 @@ interface TimeSlot {
 
 export default function HoyPage() {
   const router = useRouter();
+  const { isLocked, message: lockMessage } = useAccountLocked();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { appointments, loading, fetchAppointments, updateAppointment, invalidateCache } = useAppointments();
   const { config: scheduleConfig, workingHours, fetchScheduleConfig } = useScheduleConfig();
@@ -290,8 +292,14 @@ export default function HoyPage() {
               return (
                 <div
                   key={slot.time}
-                  className="group flex items-center gap-3 rounded-lg bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 px-3.5 py-2.5 transition-all hover:bg-teal-100 dark:hover:bg-teal-950/40 hover:border-teal-400 cursor-pointer"
-                  onClick={() => setCreateModal({ open: true, time: slot.time })}
+                  title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
+                  className={cn(
+                    "group flex items-center gap-3 rounded-lg bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 px-3.5 py-2.5 transition-all",
+                    isLocked
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-teal-100 dark:hover:bg-teal-950/40 hover:border-teal-400 cursor-pointer"
+                  )}
+                  onClick={() => { if (!isLocked) setCreateModal({ open: true, time: slot.time }); }}
                 >
                   <span className="text-sm font-mono font-bold text-teal-700 dark:text-teal-300 w-11">
                     {slot.time}
@@ -464,6 +472,8 @@ export default function HoyPage() {
                           <Button
                             size="sm"
                             variant="outline"
+                            disabled={isLocked}
+                            title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
                             className="h-7 text-xs border-teal-300 text-teal-700 hover:bg-teal-50 dark:border-teal-700 dark:text-teal-300 dark:hover:bg-teal-950/30"
                             onClick={(e) => { e.stopPropagation(); handleStatusChange(apt, "confirmed"); }}
                           >
@@ -476,6 +486,8 @@ export default function HoyPage() {
                             <Button
                               size="sm"
                               variant="outline"
+                              disabled={isLocked}
+                              title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
                               className="h-7 text-xs"
                               onClick={(e) => { e.stopPropagation(); handleStatusChange(apt, "no_show"); }}
                             >
@@ -484,6 +496,8 @@ export default function HoyPage() {
                             <Button
                               size="sm"
                               variant="destructive"
+                              disabled={isLocked}
+                              title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
                               className="h-7 text-xs"
                               onClick={(e) => { e.stopPropagation(); handleStatusChange(apt, "cancelled"); }}
                             >

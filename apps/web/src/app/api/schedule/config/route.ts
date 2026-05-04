@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 // GET /api/schedule/config — obtener configuración de agenda del profesional
 export async function GET() {
@@ -36,6 +37,9 @@ export async function GET() {
 // PUT /api/schedule/config — actualizar configuración de agenda
 export async function PUT(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 // GET /api/schedule/blocks — listar bloqueos del profesional
 export async function GET(request: NextRequest) {
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
 // POST /api/schedule/blocks — crear un bloqueo
 export async function POST(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -87,6 +91,9 @@ export async function POST(request: NextRequest) {
 // DELETE /api/schedule/blocks — eliminar un bloqueo por ID (via query param)
 export async function DELETE(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 

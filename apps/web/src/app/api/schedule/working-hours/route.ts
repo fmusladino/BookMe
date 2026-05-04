@@ -1,9 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 // PUT /api/schedule/working-hours — reemplazar todos los horarios laborales
 export async function PUT(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 

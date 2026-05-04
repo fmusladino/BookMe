@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { assertCanWrite } from "@/lib/subscriptions/lock";
 
 const createServiceSchema = z.object({
   name: z.string().min(2, "Nombre requerido"),
@@ -51,6 +52,9 @@ export async function GET() {
 // POST /api/services — Crear servicio
 export async function POST(request: NextRequest) {
   try {
+    const lockResp = await assertCanWrite();
+    if (lockResp) return lockResp;
+
     const supabase = await createClient();
     const {
       data: { user },
