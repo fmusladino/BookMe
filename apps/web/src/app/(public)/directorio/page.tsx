@@ -178,14 +178,14 @@ export default function DirectoryPage() {
       <section className="bg-gradient-to-br from-bookme-navy via-bookme-navy to-slate-800 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 text-white py-10 md:py-14">
         <div className="max-w-5xl mx-auto px-4 text-center">
           <h1 className="text-2xl md:text-3xl font-bold mb-2">
-            Encontrá tu profesional
+            Encontrá tu profesional y sacá turno al instante
           </h1>
           <p className="text-blue-200 dark:text-slate-400 text-sm mb-6 max-w-lg mx-auto">
             Buscá entre profesionales de salud y negocios en toda LATAM
           </p>
 
-          {/* Search + City en una fila */}
-          <div className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
+          {/* Search + Cobertura + City en una fila */}
+          <div className="flex flex-col sm:flex-row gap-3 max-w-3xl mx-auto">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -196,6 +196,73 @@ export default function DirectoryPage() {
                 className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-white/10 backdrop-blur-sm text-white placeholder-blue-200/70 border border-white/20 focus:outline-none focus:ring-2 focus:ring-bookme-mint focus:border-transparent text-sm"
               />
             </div>
+
+            {/* Cobertura — dropdown */}
+            <div ref={insuranceDropdownRef} className="relative sm:w-56">
+              <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <button
+                type="button"
+                onClick={() => setShowInsuranceDropdown(!showInsuranceDropdown)}
+                className="w-full pl-10 pr-9 py-2.5 rounded-lg bg-white/10 backdrop-blur-sm text-left text-sm border border-white/20 focus:outline-none focus:ring-2 focus:ring-bookme-mint focus:border-transparent text-white"
+              >
+                <span className={selectedInsuranceName ? 'text-white' : 'text-blue-200/70'}>
+                  {selectedInsuranceName || 'Cobertura'}
+                </span>
+              </button>
+              {selectedInsurance ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setSelectedInsurance(''); setInsuranceSearch(''); setPage(1); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-white"
+                  aria-label="Limpiar cobertura"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              )}
+
+              {showInsuranceDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-border bg-card shadow-lg max-h-72 overflow-hidden text-left">
+                  <div className="p-2 border-b border-border">
+                    <input
+                      type="text"
+                      placeholder="Buscar cobertura..."
+                      value={insuranceSearch}
+                      onChange={(e) => setInsuranceSearch(e.target.value)}
+                      className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="overflow-y-auto max-h-56">
+                    {filtersLoading ? (
+                      <p className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Cargando coberturas...</p>
+                    ) : filteredInsurances.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-muted-foreground">No se encontraron coberturas</p>
+                    ) : (
+                      filteredInsurances.map((ins) => (
+                        <button
+                          key={ins.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedInsurance(ins.id);
+                            setInsuranceSearch('');
+                            setShowInsuranceDropdown(false);
+                            setPage(1);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${
+                            selectedInsurance === ins.id ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                          }`}
+                        >
+                          {ins.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="relative sm:w-48">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -265,71 +332,7 @@ export default function DirectoryPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              {/* Filtro por obra social / prepaga (primero) */}
-              {line === 'healthcare' && (
-                <div ref={insuranceDropdownRef} className="relative sm:w-64">
-                  <div
-                    onClick={() => setShowInsuranceDropdown(!showInsuranceDropdown)}
-                    className="flex items-center justify-between w-full rounded-lg border border-border bg-background px-3 py-2 text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <span className={selectedInsuranceName ? 'text-foreground' : 'text-muted-foreground'}>
-                      {selectedInsuranceName || 'Obra social / Prepaga'}
-                    </span>
-                    {selectedInsurance ? (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setSelectedInsurance(''); setInsuranceSearch(''); setPage(1); }}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                    )}
-                  </div>
-
-                  {showInsuranceDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border border-border bg-card shadow-lg max-h-60 overflow-hidden">
-                      {/* Buscador dentro del dropdown */}
-                      <div className="p-2 border-b border-border">
-                        <input
-                          type="text"
-                          placeholder="Buscar obra social..."
-                          value={insuranceSearch}
-                          onChange={(e) => setInsuranceSearch(e.target.value)}
-                          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                          autoFocus
-                        />
-                      </div>
-                      <div className="overflow-y-auto max-h-48">
-                        {filtersLoading ? (
-                          <p className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Cargando obras sociales...</p>
-                        ) : filteredInsurances.length === 0 ? (
-                          <p className="px-3 py-2 text-xs text-muted-foreground">No se encontraron resultados ({insurances.length} total)</p>
-                        ) : (
-                          filteredInsurances.map((ins) => (
-                            <button
-                              key={ins.id}
-                              onClick={() => {
-                                setSelectedInsurance(ins.id);
-                                setInsuranceSearch('');
-                                setShowInsuranceDropdown(false);
-                                setPage(1);
-                              }}
-                              className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${
-                                selectedInsurance === ins.id ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
-                              }`}
-                            >
-                              {ins.name}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Filtro por localidad (segundo) */}
+              {/* Filtro por localidad */}
               <div ref={cityDropdownRef} className="relative sm:w-56">
                 <div
                   onClick={() => setShowCityDropdown(!showCityDropdown)}
