@@ -358,7 +358,7 @@ export default function ServiciosPage() {
       >
         <DialogContent
           onClose={() => { setCreateModalOpen(false); setEditingService(null); }}
-          className="sm:max-w-2xl"
+          className="sm:max-w-4xl"
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
@@ -370,7 +370,12 @@ export default function ServiciosPage() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-1 pt-2">
+          <div className="max-h-[78vh] overflow-y-auto pr-1 pt-2 space-y-6">
+            {/* ─── Layout 2 columnas (lg+) ─── */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* ── Columna izquierda ── */}
+              <div className="space-y-6">
+
             {/* ── Nombre del servicio ─────────────────────────── */}
             <div className="space-y-2">
               <Label htmlFor="name" className="text-sm font-semibold">
@@ -396,7 +401,7 @@ export default function ServiciosPage() {
                 onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="Describí brevemente en qué consiste este servicio..."
                 maxLength={500}
-                rows={3}
+                rows={4}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
               />
               <p className="text-xs text-muted-foreground text-right">
@@ -442,6 +447,10 @@ export default function ServiciosPage() {
                 ))}
               </div>
             </div>
+
+              </div>
+              {/* ── Columna derecha ── */}
+              <div className="space-y-6">
 
             {/* ── Obras sociales (solo Healthcare) ───────────── */}
             {isHealthcare && (
@@ -603,6 +612,11 @@ export default function ServiciosPage() {
                 </div>
               )}
             </div>
+
+              </div>
+              {/* ── fin columna derecha ── */}
+            </div>
+            {/* ── fin grid 2 columnas ── */}
 
             {/* ── Botones ────────────────────────────────────── */}
             <div className="flex gap-3 pt-4 border-t sticky bottom-0 bg-background pb-1">
