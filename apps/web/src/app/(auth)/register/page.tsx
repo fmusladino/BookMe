@@ -1,24 +1,67 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { Stethoscope, User, ChevronRight, Store } from "lucide-react";
+import { Stethoscope, User, ChevronRight, Store, Eye, EyeOff, Check, X } from "lucide-react";
+import { getPasswordStrength, PASSWORD_MIN_LENGTH } from "@/lib/password";
+import { TRIAL_DAYS } from "@/lib/trial";
 
 // Especialidades sugeridas por línea
 const SPECIALTIES: Record<string, string[]> = {
   healthcare: [
-    "Médico/a Clínico/a",
-    "Pediatra",
-    "Odontólogo/a",
-    "Psicólogo/a",
-    "Kinesiólogo/a",
-    "Nutricionista",
-    "Dermatólogo/a",
-    "Ginecólogo/a",
-    "Traumatólogo/a",
+    "Acupunturista",
+    "Alergólogo/a",
+    "Anestesiólogo/a",
     "Cardiólogo/a",
+    "Cirujano/a General",
+    "Cirujano/a Plástico/a",
+    "Dermatólogo/a",
+    "Endocrinólogo/a",
+    "Endodoncista",
+    "Enfermero/a",
+    "Fisiatra",
+    "Fonoaudiólogo/a",
+    "Gastroenterólogo/a",
+    "Geriatra",
+    "Ginecólogo/a",
+    "Hematólogo/a",
+    "Homeópata",
+    "Implantólogo/a",
+    "Infectólogo/a",
+    "Inmunólogo/a",
+    "Kinesiólogo/a",
+    "Médico/a Clínico/a",
+    "Médico/a Deportólogo/a",
+    "Médico/a Estético/a",
+    "Médico/a Familiar",
+    "Nefrólogo/a",
+    "Neumólogo/a",
+    "Neurocirujano/a",
+    "Neurólogo/a",
+    "Nutricionista",
+    "Obstetra / Partera",
+    "Odontólogo/a",
+    "Oftalmólogo/a",
+    "Oncólogo/a",
+    "Optometrista",
+    "Ortodoncista",
+    "Osteópata",
+    "Otorrinolaringólogo/a",
+    "Patólogo/a",
+    "Pediatra",
+    "Periodoncista",
+    "Podólogo/a",
+    "Psicólogo/a",
+    "Psicopedagogo/a",
+    "Psiquiatra",
+    "Quiropráctico/a",
+    "Radiólogo/a",
+    "Reumatólogo/a",
+    "Terapeuta Ocupacional",
+    "Traumatólogo/a",
+    "Urólogo/a",
   ],
   business: [
     "Peluquería",
@@ -53,15 +96,18 @@ export default function RegisterPage() {
   const [accountType, setAccountType] = useState<"patient" | "professional" | "canchas" | null>(null);
 
   // Datos comunes
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [dni, setDni] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Datos profesionales
-  const [line, setLine] = useState<"healthcare" | "business">("healthcare");
+  const line: "healthcare" | "business" = "healthcare";
   const [specialty, setSpecialty] = useState("");
   const [customSpecialty, setCustomSpecialty] = useState("");
 
@@ -91,12 +137,19 @@ export default function RegisterPage() {
     }, 50);
   };
 
+  const passwordStrength = useMemo(() => getPasswordStrength(password), [password]);
+  const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+
   const validateForm = (): boolean => {
-    if (!fullName.trim()) { showError("El nombre completo es requerido"); return false; }
+    if (!firstName.trim()) { showError("El nombre es requerido"); return false; }
+    if (!lastName.trim()) { showError("El apellido es requerido"); return false; }
     if (!dni.trim()) { showError("El DNI es requerido"); return false; }
     if (!phone.trim()) { showError("El teléfono es requerido"); return false; }
     if (!email.trim()) { showError("El email es requerido"); return false; }
-    if (password.length < 6) { showError("La contraseña debe tener al menos 6 caracteres"); return false; }
+    if (!passwordStrength.valid) {
+      showError(`La contraseña no cumple los requisitos mínimos de seguridad`);
+      return false;
+    }
     if (password !== confirmPassword) { showError("Las contraseñas no coinciden"); return false; }
 
     if (accountType === "professional") {
@@ -200,14 +253,6 @@ export default function RegisterPage() {
     }
   };
 
-  const handleGoogleRegister = async () => {
-    const { error: authError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/callback` },
-    });
-    if (authError) setError(authError.message);
-  };
-
   // ─── Step 1: Elegir tipo de cuenta ──────────────────────────
   if (accountType === null) {
     return (
@@ -244,7 +289,7 @@ export default function RegisterPage() {
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-medium text-blue-600 dark:text-blue-400">
-                  7 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
+                  {TRIAL_DAYS} días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
                 </span>
               </button>
 
@@ -283,7 +328,7 @@ export default function RegisterPage() {
                     </p>
                   </div>
                   <span className="inline-flex items-center text-xs font-medium text-orange-600 dark:text-orange-400">
-                    7 días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
+                    {TRIAL_DAYS} días gratis <ChevronRight className="h-3 w-3 ml-0.5" />
                   </span>
                 </button>
               )}
@@ -314,15 +359,15 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
+      <div className="w-full max-w-3xl space-y-8">
         {/* Logo */}
         <div className="text-center">
           <h1 className="text-4xl font-heading font-bold text-bookme-navy dark:text-bookme-mint">BookMe</h1>
           <p className="mt-2 text-muted-foreground text-sm">
             {isProfessional
-              ? "Registro profesional — 7 días gratis"
+              ? `Registro profesional — ${TRIAL_DAYS} días gratis`
               : isCanchas
-                ? "Registro de canchas — 7 días gratis"
+                ? `Registro de canchas — ${TRIAL_DAYS} días gratis`
                 : "Reservá tus turnos online"}
           </p>
         </div>
@@ -340,7 +385,7 @@ export default function RegisterPage() {
               </h2>
               <p className="text-sm text-muted-foreground">
                 {isProfessional
-                  ? "Completá tus datos para activar tu trial de 7 días"
+                  ? `Completá tus datos para activar tu trial de ${TRIAL_DAYS} días`
                   : isCanchas
                     ? "Configurá tu comercio y empezá a recibir reservas"
                     : "Registrate para reservar turnos"
@@ -361,49 +406,30 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* Google (solo para profesionales y pacientes) */}
-          {!isCanchas && (
-            <>
-              <button
-                type="button"
-                onClick={handleGoogleRegister}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-3 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                </svg>
-                Registrarse con Google
-              </button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">o</span>
-                </div>
-              </div>
-            </>
-          )}
-
           {/* Formulario */}
           <form onSubmit={handleRegister} className="space-y-4">
-            {/* Nombre */}
-            <div className="space-y-1.5">
-              <label htmlFor="fullName" className="text-sm font-medium text-foreground">
-                {isCanchas ? "Tu nombre completo" : "Nombre completo"}
-              </label>
-              <input
-                id="fullName" type="text" autoComplete="name"
-                placeholder={isProfessional ? "Dr. Juan Pérez" : isCanchas ? "Juan Pérez" : "Juan Pérez"}
-                value={fullName} onChange={(e) => setFullName(e.target.value)}
-                required disabled={loading}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
-              />
+            {/* Nombre + Apellido */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="firstName" className="text-sm font-medium text-foreground">Nombre</label>
+                <input
+                  id="firstName" type="text" autoComplete="given-name"
+                  placeholder={isProfessional ? "Juan" : "Juan"}
+                  value={firstName} onChange={(e) => setFirstName(e.target.value)}
+                  required disabled={loading}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="lastName" className="text-sm font-medium text-foreground">Apellido</label>
+                <input
+                  id="lastName" type="text" autoComplete="family-name"
+                  placeholder="Pérez"
+                  value={lastName} onChange={(e) => setLastName(e.target.value)}
+                  required disabled={loading}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                />
+              </div>
             </div>
 
             {/* DNI + Teléfono */}
@@ -443,23 +469,98 @@ export default function RegisterPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label htmlFor="password" className="text-sm font-medium text-foreground">Contraseña</label>
-                <input
-                  id="password" type="password" autoComplete="new-password" placeholder="Min. 6 caracteres"
-                  value={password} onChange={(e) => setPassword(e.target.value)}
-                  required disabled={loading}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder={`Mín. ${PASSWORD_MIN_LENGTH} caracteres`}
+                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    required disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 pr-9 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">Confirmar</label>
-                <input
-                  id="confirmPassword" type="password" autoComplete="new-password" placeholder="Repetir"
-                  value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                  required disabled={loading}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
-                />
+                <div className="relative">
+                  <input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder="Repetir"
+                    value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                    required disabled={loading}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 pr-9 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    tabIndex={-1}
+                    aria-label={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* Medidor de fuerza + checklist */}
+            {password.length > 0 && (
+              <div className="space-y-2 -mt-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 grid grid-cols-4 gap-1">
+                    {[1, 2, 3, 4].map((i) => {
+                      const active = passwordStrength.score >= i;
+                      const color =
+                        passwordStrength.score <= 1 ? "bg-red-500"
+                        : passwordStrength.score === 2 ? "bg-orange-500"
+                        : passwordStrength.score === 3 ? "bg-yellow-500"
+                        : "bg-green-500";
+                      return (
+                        <div
+                          key={i}
+                          className={`h-1.5 rounded-full transition-colors ${active ? color : "bg-muted"}`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className={`text-xs font-medium ${
+                    passwordStrength.score <= 1 ? "text-red-500"
+                    : passwordStrength.score === 2 ? "text-orange-500"
+                    : passwordStrength.score === 3 ? "text-yellow-600 dark:text-yellow-500"
+                    : "text-green-600 dark:text-green-500"
+                  }`}>
+                    {passwordStrength.label}
+                  </span>
+                </div>
+                <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  {[
+                    { ok: passwordStrength.requirements.length, text: `Al menos ${PASSWORD_MIN_LENGTH} caracteres` },
+                    { ok: passwordStrength.requirements.upper, text: "Una mayúscula (A-Z)" },
+                    { ok: passwordStrength.requirements.lower, text: "Una minúscula (a-z)" },
+                    { ok: passwordStrength.requirements.number, text: "Un número (0-9)" },
+                    { ok: passwordStrength.requirements.special, text: "Un símbolo (!@#$...)" },
+                    { ok: passwordStrength.requirements.notCommon, text: "No ser una clave común" },
+                  ].map((req) => (
+                    <li key={req.text} className={`flex items-center gap-1.5 ${req.ok ? "text-green-600 dark:text-green-500" : "text-muted-foreground"}`}>
+                      {req.ok ? <Check className="h-3 w-3 shrink-0" /> : <X className="h-3 w-3 shrink-0" />}
+                      <span>{req.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* ── Campos extra para profesionales ── */}
             {isProfessional && (
@@ -467,37 +568,6 @@ export default function RegisterPage() {
                 <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">
                   Datos profesionales
                 </p>
-
-                {/* Línea de negocio */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Línea de negocio</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setLine("healthcare"); setSpecialty(""); }}
-                      className={`rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all ${
-                        line === "healthcare"
-                          ? "border-blue-500 bg-blue-100 text-blue-700 dark:border-blue-400 dark:bg-blue-900/50 dark:text-blue-200"
-                          : "border-border bg-background text-muted-foreground hover:border-blue-300"
-                      }`}
-                    >
-                      <Stethoscope className="inline h-4 w-4 mr-1.5 -mt-0.5" />
-                      Salud
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setLine("business"); setSpecialty(""); }}
-                      className={`rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all ${
-                        line === "business"
-                          ? "border-emerald-500 bg-emerald-100 text-emerald-700 dark:border-emerald-400 dark:bg-emerald-900/50 dark:text-emerald-200"
-                          : "border-border bg-background text-muted-foreground hover:border-emerald-300"
-                      }`}
-                    >
-                      <User className="inline h-4 w-4 mr-1.5 -mt-0.5" />
-                      Negocios
-                    </button>
-                  </div>
-                </div>
 
                 {/* Especialidad */}
                 <div className="space-y-1.5">
@@ -531,23 +601,13 @@ export default function RegisterPage() {
                   Ubicación del consultorio
                 </p>
 
-                <div className="space-y-1.5">
-                  <label htmlFor="address" className="text-sm font-medium text-foreground">Dirección</label>
-                  <input
-                    id="address" type="text" autoComplete="street-address"
-                    placeholder="Av. Corrientes 1234, Piso 3, Of. B"
-                    value={address} onChange={(e) => setAddress(e.target.value)}
-                    required disabled={loading}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
-                  />
-                </div>
-
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2 space-y-1.5">
-                    <label htmlFor="city" className="text-sm font-medium text-foreground">Localidad</label>
+                    <label htmlFor="address" className="text-sm font-medium text-foreground">Dirección</label>
                     <input
-                      id="city" type="text" autoComplete="address-level2" placeholder="Rosario"
-                      value={city} onChange={(e) => setCity(e.target.value)}
+                      id="address" type="text" autoComplete="street-address"
+                      placeholder="Av. Corrientes 1234, Piso 3, Of. B"
+                      value={address} onChange={(e) => setAddress(e.target.value)}
                       required disabled={loading}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
                     />
@@ -563,7 +623,16 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label htmlFor="city" className="text-sm font-medium text-foreground">Localidad</label>
+                    <input
+                      id="city" type="text" autoComplete="address-level2" placeholder="Rosario"
+                      value={city} onChange={(e) => setCity(e.target.value)}
+                      required disabled={loading}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors disabled:opacity-50"
+                    />
+                  </div>
                   <div className="space-y-1.5">
                     <label htmlFor="province" className="text-sm font-medium text-foreground">Provincia</label>
                     <select
@@ -620,7 +689,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="flex items-center gap-2 rounded-md bg-blue-100 dark:bg-blue-900/40 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-                  <span className="font-bold text-base">30</span>
+                  <span className="font-bold text-base">{TRIAL_DAYS}</span>
                   <span>días de prueba gratis con todas las funcionalidades del plan Standard.</span>
                 </div>
               </div>
@@ -755,7 +824,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="flex items-center gap-2 rounded-md bg-orange-100 dark:bg-orange-900/40 px-3 py-2 text-xs text-orange-700 dark:text-orange-300">
-                  <span className="font-bold text-base">30</span>
+                  <span className="font-bold text-base">{TRIAL_DAYS}</span>
                   <span>días de prueba gratis. Configurá tus canchas, horarios y empezá a recibir reservas online.</span>
                 </div>
               </div>

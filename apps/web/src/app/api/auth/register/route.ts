@@ -3,11 +3,12 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 import { getTrialEndsAt } from "@/lib/trial";
+import { validateStrongPassword, PASSWORD_MIN_LENGTH } from "@/lib/password";
 
 // Schema base para todos los registros
 const baseSchema = z.object({
   email: z.string().email("Email inválido"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  password: z.string().min(PASSWORD_MIN_LENGTH, `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`),
   full_name: z.string().min(1, "El nombre es requerido"),
   dni: z.string().min(1, "El DNI es requerido"),
   phone: z.string().min(1, "El teléfono es requerido"),
@@ -33,8 +34,8 @@ const baseSchema = z.object({
  * Registra un nuevo usuario como paciente, profesional o dueño de canchas.
  *
  * - Paciente: crea auth user + profile (role: patient)
- * - Profesional: crea auth user + profile (role: professional) + professionals row con trial 30 días
- * - Canchas: crea auth user + profile (role: canchas) + court_owners row con trial 30 días
+ * - Profesional: crea auth user + profile (role: professional) + professionals row con trial 7 días
+ * - Canchas: crea auth user + profile (role: canchas) + court_owners row con trial 7 días
  */
 export async function POST(request: NextRequest) {
   try {
@@ -58,6 +59,12 @@ export async function POST(request: NextRequest) {
       line, specialty, address, city, province, postal_code, country,
       business_name, sport, whatsapp,
     } = parsed.data;
+
+    // Validar fuerza de contraseña (mayúscula, minúscula, número, símbolo, no común)
+    const passwordError = validateStrongPassword(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
+    }
 
     // Validar campos extra si es profesional
     if (account_type === "professional") {
