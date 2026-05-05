@@ -23,12 +23,17 @@ export async function GET() {
 
     const adminClient = createAdminClient();
 
+    // Mostramos archivos de los últimos 7 días. Después se purgan automáticamente
+    // por el cron de cleanup, así que la query refleja exactamente lo disponible.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
     const { data: files, error } = await adminClient
       .from("patient_shared_files")
       .select(
         "id, patient_id, patient_profile_id, file_name, file_size, mime_type, description, uploaded_at, viewed_at"
       )
       .eq("professional_id", user.id)
+      .gte("uploaded_at", sevenDaysAgo)
       .order("uploaded_at", { ascending: false })
       .limit(100);
 

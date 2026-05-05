@@ -37,6 +37,8 @@ export async function GET(
       );
     }
 
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
     const { data, error } = await supabase
       .from("patient_shared_files")
       .select(
@@ -44,6 +46,7 @@ export async function GET(
       )
       .eq("professional_id", user.id)
       .eq("patient_id", patientId)
+      .gte("uploaded_at", sevenDaysAgo)
       .order("uploaded_at", { ascending: false });
 
     if (error) {

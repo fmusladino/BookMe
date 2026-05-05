@@ -5,6 +5,7 @@ import {
   sendReminderEmail,
   sendReminderWhatsApp,
 } from "@bookme/notifications";
+import { cleanupExpiredSharedFiles } from "@/lib/shared-files/cleanup";
 
 // Ventana de tolerancia: ± WINDOW_MINUTES / 2 alrededor del offset configurado.
 // Con cron horario, 60 garantiza que cada offset se dispara una única vez
@@ -196,9 +197,17 @@ export async function GET(request: NextRequest) {
       console.error("Errores en recordatorios:", errors);
     }
 
+    // Limpieza diaria de archivos compartidos por pacientes (> 7 días).
+    // Va piggyback en este cron para no consumir un slot extra del plan Hobby.
+    const cleanup = await cleanupExpiredSharedFiles();
+    if (cleanup.deleted > 0) {
+      console.log(`[cleanup] Archivos compartidos eliminados: ${cleanup.deleted}`);
+    }
+
     return NextResponse.json({
       sent,
       pending: pending.length,
+      shared_files_cleaned: cleanup.deleted,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

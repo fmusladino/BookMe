@@ -49,7 +49,7 @@ export default function NotificacionesPage() {
   const [notifications, setNotifications] = useState<FileNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterMode>("pending");
+  const [filter, setFilter] = useState<FilterMode>("all");
 
   const load = useCallback(async () => {
     try {
@@ -103,6 +103,7 @@ export default function NotificacionesPage() {
           </h1>
           <p className="text-sm text-muted-foreground">
             Archivos y estudios que tus pacientes te enviaron desde su portal.
+            Se conservan por <span className="font-medium">7 días</span> y luego se eliminan automáticamente.
           </p>
         </div>
         {pendingCount > 0 && (
