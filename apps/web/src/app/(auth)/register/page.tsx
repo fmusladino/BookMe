@@ -63,18 +63,6 @@ const SPECIALTIES: Record<string, string[]> = {
     "Traumatólogo/a",
     "Urólogo/a",
   ],
-  business: [
-    "Peluquería",
-    "Barbería",
-    "Estética",
-    "Coach / Consultoría",
-    "Abogado/a",
-    "Contador/a",
-    "Entrenador/a personal",
-    "Masajista",
-    "Tatuador/a",
-    "Profesor/a particular",
-  ],
 };
 
 const BUSINESS_TYPES = [
@@ -106,8 +94,8 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Datos profesionales
-  const line: "healthcare" | "business" = "healthcare";
+  // Datos profesionales (BookMe es solo Healthcare)
+  const line = "healthcare" as const;
   const [specialty, setSpecialty] = useState("");
   const [customSpecialty, setCustomSpecialty] = useState("");
 
@@ -285,7 +273,7 @@ export default function RegisterPage() {
                 <div>
                   <p className="font-semibold text-foreground">Soy Profesional</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Médico, psicólogo, peluquero, coach...
+                    Médico, psicólogo, kinesiólogo, nutricionista...
                   </p>
                 </div>
                 <span className="inline-flex items-center text-xs font-medium text-blue-600 dark:text-blue-400">

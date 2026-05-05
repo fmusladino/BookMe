@@ -35,6 +35,7 @@ import {
   BookOpen,
   Compass,
   AlertTriangle,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -56,6 +57,7 @@ const NAV_PROFESSIONAL_BASE: NavItem[] = [
   { label: "Agenda", href: "/dashboard/agenda", icon: Calendar },
   { label: "Hoy", href: "/dashboard/agenda/hoy", icon: Clock },
   { label: "Pacientes", href: "/dashboard/pacientes", icon: Users },
+  { label: "Notificaciones", href: "/dashboard/notificaciones", icon: Bell },
   { label: "Servicios", href: "/dashboard/servicios", icon: FileText },
   { label: "Métricas", href: "/dashboard/metricas", icon: BarChart3 },
 ];
@@ -77,6 +79,7 @@ const NAV_PROFESSIONAL_FOOTER: NavItem[] = [
 // Paciente
 const NAV_PATIENT: NavItem[] = [
   { label: "Mis turnos", href: "/mis-turnos", icon: CalendarCheck },
+  { label: "Mis médicos", href: "/mis-medicos", icon: Stethoscope },
   { label: "Directorio", href: "/directorio", icon: Users },
   { label: "Mi perfil", href: "/mis-turnos/mi-perfil", icon: UserCircle },
 ];
@@ -133,8 +136,37 @@ export const Sidebar = memo(function Sidebar() {
   const { user, loading, clear } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useEffect(() => setMounted(true), []);
+
+  // Conteo de notificaciones (archivos sin ver) — solo para profesionales.
+  // Se refetcha al cambiar de ruta y cada 60s.
+  useEffect(() => {
+    if (user?.role !== "professional") {
+      setUnreadNotifications(0);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const res = await fetch("/api/professional/notifications");
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { unread_count?: number };
+        if (!cancelled) setUnreadNotifications(data.unread_count ?? 0);
+      } catch {
+        // silencioso — el badge es informativo, no bloqueante
+      }
+    };
+
+    void fetchCount();
+    const interval = setInterval(fetchCount, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user?.role, pathname]);
 
   // Construir items de navegación según rol y línea
   const navItems = useMemo<NavItem[]>(() => {
@@ -257,9 +289,6 @@ export const Sidebar = memo(function Sidebar() {
                 {user.professional?.line === "healthcare" && (
                   <span className="ml-1 text-blue-500">• Salud</span>
                 )}
-                {user.professional?.line === "business" && (
-                  <span className="ml-1 text-emerald-500">• Negocios</span>
-                )}
                 {user.role === "canchas" && (
                   <span className="ml-1 text-orange-500">• Canchas</span>
                 )}
@@ -286,6 +315,9 @@ export const Sidebar = memo(function Sidebar() {
               // Generar atributo data-tour a partir del label del nav item
               const tourId = `nav-${item.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "-")}`;
 
+              const showNotifBadge =
+                item.href === "/dashboard/notificaciones" && unreadNotifications > 0;
+
               return (
                 <Link
                   key={item.href}
@@ -300,7 +332,12 @@ export const Sidebar = memo(function Sidebar() {
                   )}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {showNotifBadge && (
+                    <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 min-w-[18px] h-[18px]">
+                      {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                    </span>
+                  )}
                 </Link>
               );
             })

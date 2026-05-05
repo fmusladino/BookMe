@@ -90,12 +90,6 @@ const PLAN_OPTIONS_BY_LINE: Record<string, { value: string; label: string; price
     { value: "standard", label: "Standard", price: "USD 15/mes" },
     { value: "premium", label: "Premium", price: "USD 20/mes" },
   ],
-  business: [
-    { value: "free", label: "Free", price: "Gratis" },
-    { value: "base", label: "Base", price: "USD 7/mes" },
-    { value: "standard", label: "Standard", price: "USD 14/mes" },
-    { value: "premium", label: "Premium", price: "USD 25/mes" },
-  ],
 };
 
 // Planes de consultorio — solo Healthcare
@@ -121,7 +115,6 @@ const CLINIC_PLAN_OPTIONS = [
 
 const LINE_OPTIONS = [
   { value: "healthcare", label: "Healthcare (Salud)" },
-  { value: "business", label: "Business (Negocios)" },
   { value: "consultorio", label: "Consultorio (Clínica)" },
 ] as const;
 
@@ -671,7 +664,7 @@ export default function UsuariosPage() {
                   {formData.line === "consultorio" ? "Configuración de consultorio" : "Configuración de profesional"}
                 </legend>
 
-                {/* ── Healthcare / Business: Especialidad + Plan individual ── */}
+                {/* ── Healthcare: Especialidad + Plan individual ── */}
                 {formData.line !== "consultorio" && (
                   <>
                     <div>
@@ -679,7 +672,7 @@ export default function UsuariosPage() {
                       <Input
                         value={formData.specialty}
                         onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                        placeholder={formData.line === "healthcare" ? "Ej: Médico Clínico, Odontóloga, Psicóloga..." : "Ej: Peluquería, Barbería, Coach..."}
+                        placeholder="Ej: Médico Clínico, Odontóloga, Psicóloga..."
                       />
                     </div>
 

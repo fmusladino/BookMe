@@ -11,7 +11,7 @@ const createServiceSchema = z.object({
   price: z.number().min(0).optional().nullable(),
   show_price: z.boolean().optional(),
   modality: z.enum(["presencial", "virtual", "both"]).optional().default("presencial"),
-  line: z.enum(["healthcare", "business"]).optional().default("healthcare"),
+  line: z.literal("healthcare").optional().default("healthcare"),
   insurance_ids: z.array(z.string().uuid()).optional(), // IDs de obras sociales que acepta
 });
 

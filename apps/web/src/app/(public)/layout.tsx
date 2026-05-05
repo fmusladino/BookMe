@@ -1,39 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LogIn, LogOut, HelpCircle, User } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useSession } from '@/hooks/use-session';
 
 export default function PublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient();
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, role')
-          .eq('id', data.user.id)
-          .single();
-        if (profile) {
-          setUser({ name: profile.full_name, role: profile.role });
-        }
-      }
-    };
-    checkAuth();
-  }, []);
+  const { user: sessionUser, clear } = useSession();
+  const user = sessionUser
+    ? { name: sessionUser.full_name, role: sessionUser.role }
+    : null;
 
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    setUser(null);
+    clear();
     window.location.href = '/login';
   };
 

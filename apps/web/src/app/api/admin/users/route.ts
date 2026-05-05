@@ -15,7 +15,7 @@ const createUserSchema = z.object({
   phone: z.string().min(1, "Teléfono requerido"),
   role: z.enum(["professional", "patient", "admin", "superadmin", "marketing"] as const),
   // Campos opcionales para profesionales — obligatorios cuando role = "professional"
-  line: z.enum(["healthcare", "business", "consultorio"]).optional(),
+  line: z.enum(["healthcare", "consultorio"]).optional(),
   specialty: z.string().optional(),
   subscription_plan: z.enum(["free", "base", "standard", "premium"]).optional(),
   // Campos opcionales para admin de consultorio — obligatorios cuando role = "admin"

@@ -168,26 +168,6 @@ export default function AdminDashboard() {
                 />
               </div>
             </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="font-medium">Business</span>
-                <span className="text-muted-foreground">
-                  {stats?.business_professionals || 0}
-                </span>
-              </div>
-              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500"
-                  style={{
-                    width: `${
-                      ((stats?.business_professionals || 0) /
-                        (stats?.total_professionals || 1)) *
-                      100
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
           </div>
         </Card>
 

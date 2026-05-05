@@ -13,7 +13,7 @@ const createProfessionalSchema = z.object({
   full_name: z.string().min(1, "Nombre requerido"),
   dni: z.string().min(1, "DNI requerido"),
   phone: z.string().min(1, "Teléfono requerido"),
-  line: z.enum(["healthcare", "business"] as const),
+  line: z.literal("healthcare").default("healthcare"),
   specialty: z.string().min(1, "Especialidad requerida"),
   specialty_slug: z.string().min(1, "Slug de especialidad requerido"),
   city: z.string().min(1, "Ciudad requerida"),
@@ -31,7 +31,7 @@ const createProfessionalSchema = z.object({
  * Lista todos los profesionales con filtros opcionales.
  * Query params:
  *   - search: busca por full_name o email
- *   - line: filtra por healthcare | business
+ *   - line: filtra por línea (solo healthcare está soportada)
  */
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdminAuth("superadmin");
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       );
 
     // Filtrar por línea si se especifica
-    if (line && ["healthcare", "business"].includes(line)) {
+    if (line === "healthcare") {
       query = query.eq("line", line as LineOfBusiness);
     }
 

@@ -536,6 +536,46 @@ export type Database = {
         };
         Relationships: [];
       };
+      patient_shared_files: {
+        Row: {
+          id: string;
+          patient_profile_id: string;
+          patient_id: string;
+          professional_id: string;
+          file_name: string;
+          file_path: string;
+          file_size: number;
+          mime_type: string;
+          description: string | null;
+          uploaded_at: string;
+          viewed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          patient_profile_id: string;
+          patient_id: string;
+          professional_id: string;
+          file_name: string;
+          file_path: string;
+          file_size: number;
+          mime_type: string;
+          description?: string | null;
+          uploaded_at?: string;
+          viewed_at?: string | null;
+        };
+        Update: {
+          patient_profile_id?: string;
+          patient_id?: string;
+          professional_id?: string;
+          file_name?: string;
+          file_path?: string;
+          file_size?: number;
+          mime_type?: string;
+          description?: string | null;
+          viewed_at?: string | null;
+        };
+        Relationships: [];
+      };
       billing_items: {
         Row: {
           id: string;

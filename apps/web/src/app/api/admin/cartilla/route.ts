@@ -7,7 +7,7 @@ import { verifyAdminAuth } from "../_lib/auth";
  * Query params:
  *   - status: "all" | "visible" | "hidden" (default: "all")
  *   - search: texto libre para buscar por nombre, especialidad o email
- *   - line: "healthcare" | "business" (opcional)
+ *   - line: "healthcare" (opcional — única línea soportada)
  */
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdminAuth("superadmin");
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       proQuery = proQuery.eq("is_visible", false);
     }
 
-    if (line === "healthcare" || line === "business") {
+    if (line === "healthcare") {
       proQuery = proQuery.eq("line", line);
     }
 

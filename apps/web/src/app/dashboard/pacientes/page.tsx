@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Search, Phone, Mail, X, Loader2, Edit, Trash2, FileText } from "lucide-react";
+import { Plus, Search, Phone, Mail, X, Loader2, Edit, Trash2, FileText, Paperclip } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAccountLocked } from "@/hooks/use-account-lock";
@@ -18,6 +18,7 @@ interface Patient {
   is_particular: boolean;
   notes: string | null;
   created_at: string;
+  pending_files_count?: number;
 }
 
 interface Insurance {
@@ -272,6 +273,16 @@ export default function PacientesPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-1">
+                  {(patient.pending_files_count ?? 0) > 0 && (
+                    <button
+                      onClick={() => router.push(`/dashboard/pacientes/${patient.id}/notas`)}
+                      title={`${patient.pending_files_count} archivo${patient.pending_files_count === 1 ? "" : "s"} sin ver`}
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      {patient.pending_files_count} sin ver
+                    </button>
+                  )}
                   <button
                     onClick={() => router.push(`/dashboard/pacientes/${patient.id}/notas`)}
                     className="rounded-md p-2 text-muted-foreground hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-900/20 transition-colors"

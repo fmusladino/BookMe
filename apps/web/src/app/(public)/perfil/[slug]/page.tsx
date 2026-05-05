@@ -106,11 +106,8 @@ export default async function ProfessionalProfilePage({ params }: PageProps) {
     .join('')
     .toUpperCase();
 
-  const lineLabel = professional.line === 'healthcare' ? 'Salud' : 'Negocios';
-  const lineColor =
-    professional.line === 'healthcare'
-      ? 'bg-blue-100 text-blue-800'
-      : 'bg-emerald-100 text-emerald-800';
+  const lineLabel = 'Salud';
+  const lineColor = 'bg-blue-100 text-blue-800';
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">

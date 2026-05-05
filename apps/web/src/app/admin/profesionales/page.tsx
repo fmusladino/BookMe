@@ -198,7 +198,6 @@ export default function ProfessionalesPage() {
             >
               <option value="">Todas las líneas</option>
               <option value="healthcare">Healthcare</option>
-              <option value="business">Business</option>
             </select>
           </div>
           <div className="flex items-end">
@@ -256,15 +255,9 @@ export default function ProfessionalesPage() {
                     <td className="px-4 py-3">{professional.specialty}</td>
                     <td className="px-4 py-3">
                       <span
-                        className={
-                          professional.line === "healthcare"
-                            ? "inline-block px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                            : "inline-block px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-                        }
+                        className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                       >
-                        {professional.line === "healthcare"
-                          ? "Healthcare"
-                          : "Business"}
+                        Healthcare
                       </span>
                     </td>
                     <td className="px-4 py-3">{professional.city}</td>
@@ -382,16 +375,10 @@ export default function ProfessionalesPage() {
               <label className="block text-sm font-medium mb-2">Línea</label>
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                value={formData.line}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    line: e.target.value as "healthcare" | "business",
-                  })
-                }
+                value="healthcare"
+                disabled
               >
                 <option value="healthcare">Healthcare</option>
-                <option value="business">Business</option>
               </select>
             </div>
             <div>

@@ -252,7 +252,7 @@ async function applyOnboardingToDb(userId: string, state: OnboardingState) {
     await admin
       .from("professionals")
       .update({
-        line: d.line,
+        line: "healthcare",
         specialty: d.specialty,
         bio: d.bio || null,
         onboarding_completed: true,
@@ -301,7 +301,7 @@ async function applyOnboardingToDb(userId: string, state: OnboardingState) {
         price: d.servicePrice || null,
         show_price: false,
         is_active: true,
-        line: d.line || "healthcare",
+        line: "healthcare",
       });
     }
   } catch (err) {

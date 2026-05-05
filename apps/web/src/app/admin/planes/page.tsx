@@ -67,7 +67,6 @@ interface PlanFeature {
 
 const LINES = [
   { value: "healthcare", label: "Healthcare", color: "blue" },
-  { value: "business", label: "Business", color: "emerald" },
 ] as const;
 
 const PLANS = ["free", "base", "standard", "premium"] as const;
@@ -379,19 +378,13 @@ export default function PlanesPage() {
             </div>
           ) : (
             <>
-              {/* ── Healthcare & Business ── */}
+              {/* ── Healthcare ── */}
               {LINES.map((line) => {
                 const linePrices = prices.filter((p) => p.line === line.value);
                 return (
                   <Card key={line.value} className="p-6">
                     <div className="flex items-center gap-3 mb-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                          line.color === "blue"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                            : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-                        }`}
-                      >
+                      <span className="px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                         {line.label}
                       </span>
                     </div>
@@ -629,7 +622,6 @@ export default function PlanesPage() {
             <div className="flex gap-2">
               {([
                 { value: "healthcare", label: "Healthcare", color: "blue" },
-                { value: "business", label: "Business", color: "emerald" },
                 { value: "consultorio", label: "Consultorio", color: "purple" },
               ] as const).map((line) => (
                 <button
@@ -639,9 +631,7 @@ export default function PlanesPage() {
                     selectedLine === line.value
                       ? line.color === "blue"
                         ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/50 dark:text-blue-200"
-                        : line.color === "emerald"
-                          ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-200"
-                          : "border-purple-500 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-950/50 dark:text-purple-200"
+                        : "border-purple-500 bg-purple-50 text-purple-700 dark:border-purple-400 dark:bg-purple-950/50 dark:text-purple-200"
                       : "border-border text-muted-foreground hover:border-primary/40"
                   }`}
                 >
@@ -844,9 +834,7 @@ export default function PlanesPage() {
                                       disabled={isToggling}
                                       className={`inline-flex items-center justify-center w-10 h-6 rounded-full transition-all ${
                                         enabled
-                                          ? selectedLine === "healthcare"
-                                            ? "bg-blue-500 dark:bg-blue-600"
-                                            : "bg-emerald-500 dark:bg-emerald-600"
+                                          ? "bg-blue-500 dark:bg-blue-600"
                                           : "bg-gray-200 dark:bg-gray-700"
                                       }`}
                                     >

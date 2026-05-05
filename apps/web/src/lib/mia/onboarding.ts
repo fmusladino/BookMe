@@ -1,7 +1,7 @@
 /**
  * MIA Onboarding — Guía paso a paso para nuevos profesionales.
- * Flujo:
- *  1. Bienvenida → Pregunta línea (Healthcare/Business)
+ * Flujo (BookMe es solo Healthcare):
+ *  1. Bienvenida
  *  2. Especialidad
  *  3. Configurar horarios de atención
  *  4. Crear primer servicio
@@ -11,7 +11,6 @@
 
 export type OnboardingStep =
   | "welcome"
-  | "line"
   | "specialty"
   | "schedule"
   | "service"
@@ -21,7 +20,7 @@ export type OnboardingStep =
 export interface OnboardingState {
   step: OnboardingStep;
   data: {
-    line?: "healthcare" | "business";
+    line?: "healthcare";
     specialty?: string;
     workingDays?: number[];
     startTime?: string;
@@ -42,8 +41,7 @@ export interface OnboardingResponse {
 }
 
 const STEP_MESSAGES: Record<OnboardingStep, string> = {
-  welcome: `¡Bienvenido a BookMe! 🎉 Soy MIA, tu asistente, y te voy a guiar para configurar tu cuenta en unos minutos.\n\nEmpecemos: ¿tu actividad es del área de salud o es un negocio/servicio?`,
-  line: "",
+  welcome: `¡Bienvenido a BookMe! 🎉 Soy MIA, tu asistente, y te voy a guiar para configurar tu cuenta en unos minutos.`,
   specialty: "",
   schedule: "",
   service: "",
@@ -53,10 +51,9 @@ const STEP_MESSAGES: Record<OnboardingStep, string> = {
 
 export function getOnboardingWelcome(userName: string): OnboardingResponse {
   return {
-    message: `¡Hola ${userName}! 🎉 Soy MIA, tu asistente inteligente.\n\nTe voy a guiar para configurar tu cuenta en unos minutos.\n\n¿Tu actividad es del área de **salud** (médico, psicólogo, kinesiólogo, etc.) o es un **negocio/servicio** (peluquería, barbería, coaching, etc.)?`,
-    nextStep: "line",
-    state: { step: "line", data: {} },
-    options: ["Salud", "Negocio/Servicio"],
+    message: `¡Hola ${userName}! 🎉 Soy MIA, tu asistente inteligente.\n\nTe voy a guiar para configurar tu cuenta en unos minutos.\n\n¿Cuál es tu especialidad? Por ejemplo: Médico Clínico, Psicólogo, Odontólogo, Kinesiólogo, Nutricionista...`,
+    nextStep: "specialty",
+    state: { step: "specialty", data: { line: "healthcare" } },
   };
 }
 
@@ -67,29 +64,6 @@ export function processOnboardingStep(
   const lower = userMessage.toLowerCase().trim();
 
   switch (currentState.step) {
-    case "line": {
-      let line: "healthcare" | "business";
-      if (lower.includes("salud") || lower.includes("medic") || lower.includes("doctor") || lower.includes("health")) {
-        line = "healthcare";
-      } else if (lower.includes("negocio") || lower.includes("servicio") || lower.includes("business") || lower.includes("peluq") || lower.includes("barber")) {
-        line = "business";
-      } else {
-        return {
-          message: "No entendí bien. ¿Es del área de **salud** o un **negocio/servicio**?",
-          nextStep: "line",
-          state: currentState,
-          options: ["Salud", "Negocio/Servicio"],
-        };
-      }
-
-      const lineLabel = line === "healthcare" ? "Salud" : "Negocios";
-      return {
-        message: `Perfecto, línea ${lineLabel}. 👍\n\n¿Cuál es tu especialidad? Por ejemplo: ${line === "healthcare" ? "Médico Clínico, Psicólogo, Odontólogo, Kinesiólogo, Nutricionista" : "Peluquero/a, Barbero, Entrenador Personal, Coach, Abogado"}`,
-        nextStep: "specialty",
-        state: { step: "specialty", data: { ...currentState.data, line } },
-      };
-    }
-
     case "specialty": {
       if (lower.length < 3) {
         return {
@@ -105,7 +79,10 @@ export function processOnboardingStep(
       return {
         message: `${specialty}, anotado. 📝\n\nAhora configuremos tus horarios de atención. ¿Qué días atendés?\n\nPor ejemplo: "lunes a viernes" o "lunes, miércoles y viernes"`,
         nextStep: "schedule",
-        state: { step: "schedule", data: { ...currentState.data, specialty } },
+        state: {
+          step: "schedule",
+          data: { ...currentState.data, line: "healthcare", specialty },
+        },
         options: ["Lunes a Viernes", "Lunes a Sábado", "Todos los días"],
       };
     }
@@ -155,10 +132,8 @@ export function processOnboardingStep(
         endTime = `${timeMatch[2].padStart(2, "0")}:00`;
       }
 
-      const lineLabel = currentState.data.line === "healthcare" ? "Consulta general" : "Servicio estándar";
-
       return {
-        message: `Horarios configurados: ${startTime} a ${endTime}. ⏰\n\nAhora creemos tu primer servicio. ¿Cómo se llama y cuánto dura?\n\nPor ejemplo: "${lineLabel}, 30 minutos"`,
+        message: `Horarios configurados: ${startTime} a ${endTime}. ⏰\n\nAhora creemos tu primer servicio. ¿Cómo se llama y cuánto dura?\n\nPor ejemplo: "Consulta general, 30 minutos"`,
         nextStep: "profile",
         state: {
           step: "profile",
@@ -179,7 +154,7 @@ export function processOnboardingStep(
       }
 
       if (!serviceName || serviceName.length < 3) {
-        serviceName = currentState.data.line === "healthcare" ? "Consulta general" : "Servicio estándar";
+        serviceName = "Consulta general";
       }
 
       return {
@@ -200,7 +175,7 @@ export function processOnboardingStep(
       const bio = lower === "omitir" || lower === "no" ? undefined : userMessage.trim();
 
       return {
-        message: `¡Listo! 🎉 Tu cuenta está configurada:\n\n• Línea: ${currentState.data.line === "healthcare" ? "Salud" : "Negocios"}\n• Especialidad: ${currentState.data.specialty}\n• Horario: ${currentState.data.startTime} a ${currentState.data.endTime}\n• Servicio: ${currentState.data.serviceName} (${currentState.data.serviceDuration} min)\n${bio ? `• Bio: ${bio}\n` : ""}\nYa podés empezar a recibir turnos. Escribime cuando necesites ayuda. 🚀`,
+        message: `¡Listo! 🎉 Tu cuenta está configurada:\n\n• Especialidad: ${currentState.data.specialty}\n• Horario: ${currentState.data.startTime} a ${currentState.data.endTime}\n• Servicio: ${currentState.data.serviceName} (${currentState.data.serviceDuration} min)\n${bio ? `• Bio: ${bio}\n` : ""}\nYa podés empezar a recibir turnos. Escribime cuando necesites ayuda. 🚀`,
         nextStep: "done",
         state: {
           step: "done",

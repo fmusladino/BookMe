@@ -94,14 +94,10 @@ function monthLabel(ym: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function lineBadge(line: string) {
-  return line === "healthcare" ? (
+function lineBadge(_line: string) {
+  return (
     <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
       Salud
-    </span>
-  ) : (
-    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
-      Negocios
     </span>
   );
 }
@@ -350,9 +346,8 @@ export default function MarketingDashboard({
               <div className="space-y-2">
                 {[
                   { name: "Healthcare", value: d?.by_line.healthcare ?? 0, color: "bg-blue-500" },
-                  { name: "Business", value: d?.by_line.business ?? 0, color: "bg-emerald-500" },
                 ].map((item) => {
-                  const total = (d?.by_line.healthcare ?? 0) + (d?.by_line.business ?? 0);
+                  const total = d?.by_line.healthcare ?? 0;
                   const pct = total > 0 ? (item.value / total) * 100 : 0;
                   return (
                     <div key={item.name}>

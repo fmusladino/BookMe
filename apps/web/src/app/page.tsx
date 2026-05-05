@@ -218,7 +218,7 @@ export default function HomePage() {
                 Todo lo que necesitás, en un solo lugar
               </h2>
               <p className="text-muted-foreground max-w-xl mx-auto">
-                Diseñado para profesionales que venden su tiempo. Desde médicos hasta peluqueros.
+                Diseñado para profesionales de la salud que venden su tiempo.
               </p>
             </div>
           </Reveal>
@@ -280,18 +280,18 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Two lines (Espacios & Canchas oculto temporalmente) */}
+      {/* Healthcare destacado */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4">
           <Reveal>
             <div className="text-center mb-12">
               <h2 className="text-3xl sm:text-4xl font-heading font-bold mb-3">
-                Para cualquier profesional o negocio
+                Hecho para profesionales de la salud
               </h2>
-              <p className="text-muted-foreground">BookMe se adapta a tu rubro.</p>
+              <p className="text-muted-foreground">Médicos, psicólogos, kinesiólogos, nutricionistas y más.</p>
             </div>
           </Reveal>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 max-w-3xl mx-auto">
             <Reveal delay={0}>
               <div className="group p-8 rounded-2xl border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50/70 to-cyan-50/70 dark:from-blue-950/40 dark:to-cyan-950/30 hover:shadow-xl hover:-translate-y-1 transition-all h-full">
                 <div className="inline-block px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-semibold mb-4">
@@ -302,23 +302,6 @@ export default function HomePage() {
                   {["Notas privadas por paciente", "Liquidación a obras sociales", "Receta electrónica (próx.)", "Gestión de pacientes con DNI"].map((item) => (
                     <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
                       <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </Reveal>
-
-            <Reveal delay={150}>
-              <div className="group p-8 rounded-2xl border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50/70 to-teal-50/70 dark:from-emerald-950/40 dark:to-teal-950/30 hover:shadow-xl hover:-translate-y-1 transition-all h-full">
-                <div className="inline-block px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 text-xs font-semibold mb-4">
-                  Línea Negocios
-                </div>
-                <h3 className="text-2xl font-bold text-foreground mb-4">Business</h3>
-                <ul className="space-y-3">
-                  {["Notas de sesión por turno", "Catálogo de servicios con precios", "Link directo para redes sociales", "Métricas y dashboard financiero"].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
                       {item}
                     </li>
                   ))}

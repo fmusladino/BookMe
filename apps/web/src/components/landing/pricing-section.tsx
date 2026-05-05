@@ -28,27 +28,6 @@ const HC_PLANS = [
   },
 ];
 
-const BIZ_PLANS = [
-  {
-    key: "base",
-    name: "Base",
-    features: ["Agenda completa", "Turnos ilimitados", "Recordatorios WhatsApp", "Notas de sesión"],
-    highlight: false,
-  },
-  {
-    key: "standard",
-    name: "Standard",
-    features: ["Todo en Base", "Catálogo de servicios", "Dashboard financiero", "Push notifications"],
-    highlight: true,
-  },
-  {
-    key: "premium",
-    name: "Premium",
-    features: ["Todo en Standard", "MIA asistente IA", "Widget Instagram", "Soporte prioritario"],
-    highlight: false,
-  },
-];
-
 const CLINIC_PLANS = [
   {
     key: "small",
@@ -69,7 +48,6 @@ const CLINIC_PLANS = [
 // Fallback estáticos por si la API no carga
 const FALLBACK_PRICES: Record<string, Record<string, Record<string, number>>> = {
   healthcare: { base: { monthly: 9 }, standard: { monthly: 15 }, premium: { monthly: 20 } },
-  business: { base: { monthly: 7 }, standard: { monthly: 14 }, premium: { monthly: 25 } },
 };
 
 const FALLBACK_CLINIC_PRICES: Record<string, Record<string, number>> = {
@@ -125,11 +103,11 @@ export function PricingSection() {
           Elegí el plan que mejor se adapte a tu práctica. Todos incluyen 7 días de prueba gratis.
         </p>
 
-        {/* ── Healthcare ── */}
+        {/* ── Profesionales individuales ── */}
         <div className="mb-16">
           <div className="flex items-center gap-3 mb-6">
             <div className="px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm font-semibold">
-              Línea Healthcare
+              Profesionales individuales
             </div>
             <span className="text-sm text-muted-foreground">Profesionales de la salud</span>
           </div>
@@ -185,73 +163,13 @@ export function PricingSection() {
           </div>
         </div>
 
-        {/* ── Business ── */}
-        <div className="mb-16">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 text-sm font-semibold">
-              Línea Business
-            </div>
-            <span className="text-sm text-muted-foreground">Peluqueros, coaches, abogados y más</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {BIZ_PLANS.map((plan) => (
-              <div
-                key={plan.key}
-                className={`relative flex flex-col rounded-xl border-2 p-6 transition-shadow hover:shadow-lg ${
-                  plan.highlight
-                    ? "border-emerald-500 dark:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/30 shadow-md"
-                    : "border-border bg-background"
-                }`}
-              >
-                {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
-                    <Star className="w-3 h-3" /> Popular
-                  </div>
-                )}
-                <h3 className="text-lg font-bold text-foreground">{plan.name}</h3>
-                <div className="mt-2 mb-4">
-                  {loading ? (
-                    <Skeleton className="h-9 w-24" />
-                  ) : (
-                    <>
-                      <span className="text-3xl font-bold text-foreground">USD {price(plan.key, "business")}</span>
-                      <span className="text-sm text-muted-foreground">/mes</span>
-                      {toARS(price(plan.key, "business")) && (
-                        <p className="text-xs text-muted-foreground mt-1">≈ $ {toARS(price(plan.key, "business"))} ARS/mes</p>
-                      )}
-                    </>
-                  )}
-                </div>
-                <ul className="space-y-2 mb-6 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <Check className="w-4 h-4 text-emerald-500 dark:text-emerald-400 mt-0.5 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/register"
-                  className={`inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
-                    plan.highlight
-                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : "border border-border text-foreground hover:bg-muted"
-                  }`}
-                >
-                  Probar 7 días
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* ── Consultorio ── */}
         <div>
           <div className="flex items-center gap-3 mb-6">
             <div className="px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-sm font-semibold">
               Planes Consultorio
             </div>
-            <span className="text-sm text-muted-foreground">Clínicas y centros médicos — Solo línea Healthcare</span>
+            <span className="text-sm text-muted-foreground">Clínicas y centros médicos</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
             {CLINIC_PLANS.map((plan) => (

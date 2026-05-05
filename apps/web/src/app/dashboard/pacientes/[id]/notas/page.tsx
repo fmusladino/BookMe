@@ -13,6 +13,12 @@ import {
   Loader2,
   Calendar,
   X,
+  Paperclip,
+  Download,
+  FileText,
+  Image as ImageIcon,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -45,6 +51,22 @@ interface Appointment {
   service_name?: string;
 }
 
+interface SharedFile {
+  id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  description: string | null;
+  uploaded_at: string;
+  viewed_at: string | null;
+}
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export default function NotasPage() {
   const params = useParams();
   const router = useRouter();
@@ -54,9 +76,11 @@ export default function NotasPage() {
   // Estados
   const [notes, setNotes] = useState<SessionNote[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [sharedFiles, setSharedFiles] = useState<SharedFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [openingFile, setOpeningFile] = useState<string | null>(null);
 
   // Modal de crear/editar
   const [modalOpen, setModalOpen] = useState(false);
@@ -97,10 +121,39 @@ export default function NotasPage() {
     }
   }, [patientId]);
 
+  // Cargar archivos compartidos por el paciente
+  const fetchSharedFiles = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/patients/${patientId}/shared-files`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { files: SharedFile[] };
+      setSharedFiles(data.files ?? []);
+    } catch (error) {
+      console.error("Error al cargar archivos:", error);
+    }
+  }, [patientId]);
+
   useEffect(() => {
     void fetchNotes();
     void fetchAppointments();
-  }, [fetchNotes, fetchAppointments]);
+    void fetchSharedFiles();
+  }, [fetchNotes, fetchAppointments, fetchSharedFiles]);
+
+  const handleOpenFile = async (id: string) => {
+    setOpeningFile(id);
+    try {
+      const res = await fetch(`/api/patient/shared-files/${id}/download`);
+      if (!res.ok) throw new Error();
+      const data = (await res.json()) as { url: string };
+      window.open(data.url, "_blank");
+      // Refrescar para mostrar viewed_at actualizado
+      void fetchSharedFiles();
+    } catch {
+      toast.error("No se pudo abrir el archivo");
+    } finally {
+      setOpeningFile(null);
+    }
+  };
 
   // Abrir modal de crear
   const handleNewNote = () => {
@@ -252,6 +305,76 @@ export default function NotasPage() {
           Nueva nota
         </button>
       </div>
+
+      {/* Archivos enviados por el paciente */}
+      {sharedFiles.length > 0 && (
+        <div className="rounded-lg border border-border bg-card/50 p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Paperclip className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">
+              Archivos enviados por el paciente ({sharedFiles.length})
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {sharedFiles.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-3 rounded-md border border-border bg-background p-3 hover:bg-muted/40 transition-colors"
+              >
+                <div className="shrink-0">
+                  {f.mime_type.startsWith("image/") ? (
+                    <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {f.file_name}
+                    </p>
+                    <span className="text-xs text-muted-foreground">
+                      {formatFileSize(f.file_size)}
+                    </span>
+                    {f.viewed_at ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="w-3 h-3" /> Visto
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                        <Clock className="w-3 h-3" /> Nuevo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Enviado{" "}
+                    {format(parseISO(f.uploaded_at), "d 'de' MMMM yyyy, HH:mm", {
+                      locale: es,
+                    })}
+                  </p>
+                  {f.description && (
+                    <p className="text-xs text-muted-foreground/80 mt-1">
+                      {f.description}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleOpenFile(f.id)}
+                  disabled={openingFile === f.id}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {openingFile === f.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  Abrir
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Lista de notas */}
       {loading ? (

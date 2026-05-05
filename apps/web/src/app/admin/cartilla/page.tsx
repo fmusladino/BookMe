@@ -14,7 +14,6 @@ import {
   Users,
   Globe,
   Stethoscope,
-  Briefcase,
   ExternalLink,
   MapPin,
   Filter,
@@ -245,7 +244,7 @@ export default function CartillaPage() {
                 </button>
                 <button
                   onClick={() => setLineFilter("healthcare")}
-                  className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-r-md ${
                     lineFilter === "healthcare"
                       ? "bg-blue-500 text-white"
                       : "text-muted-foreground hover:bg-muted"
@@ -253,17 +252,6 @@ export default function CartillaPage() {
                 >
                   <Stethoscope className="h-3.5 w-3.5" />
                   Salud
-                </button>
-                <button
-                  onClick={() => setLineFilter("business")}
-                  className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors ${
-                    lineFilter === "business"
-                      ? "bg-emerald-500 text-white"
-                      : "text-muted-foreground hover:bg-muted"
-                  } rounded-r-md`}
-                >
-                  <Briefcase className="h-3.5 w-3.5" />
-                  Negocios
                 </button>
               </div>
             </div>
@@ -326,17 +314,10 @@ export default function CartillaPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold truncate">{prof.profile.full_name}</h3>
-                      {prof.line === "healthcare" ? (
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 shrink-0">
-                          <Stethoscope className="mr-1 h-3 w-3" />
-                          Salud
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 shrink-0">
-                          <Briefcase className="mr-1 h-3 w-3" />
-                          Negocios
-                        </Badge>
-                      )}
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 shrink-0">
+                        <Stethoscope className="mr-1 h-3 w-3" />
+                        Salud
+                      </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground truncate">{prof.specialty}</p>
                     <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">

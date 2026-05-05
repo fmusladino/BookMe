@@ -60,7 +60,24 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ patients: data });
+    // Conteo de archivos pendientes de ver por paciente (viewed_at IS NULL)
+    const pendingFilesCount: Record<string, number> = {};
+    const { data: pendingFiles } = await supabase
+      .from("patient_shared_files")
+      .select("patient_id")
+      .eq("professional_id", user.id)
+      .is("viewed_at", null);
+
+    for (const f of pendingFiles ?? []) {
+      pendingFilesCount[f.patient_id] = (pendingFilesCount[f.patient_id] ?? 0) + 1;
+    }
+
+    const enriched = (data ?? []).map((p) => ({
+      ...p,
+      pending_files_count: pendingFilesCount[p.id] ?? 0,
+    }));
+
+    return NextResponse.json({ patients: enriched });
   } catch (error) {
     console.error("Error GET /api/patients:", error);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });

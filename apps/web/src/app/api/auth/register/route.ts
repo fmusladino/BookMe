@@ -14,8 +14,8 @@ const baseSchema = z.object({
   phone: z.string().min(1, "El teléfono es requerido"),
   // Tipo de cuenta: paciente, profesional o canchas
   account_type: z.enum(["patient", "professional", "canchas"]).default("patient"),
-  // Campos extra para profesionales (opcionales)
-  line: z.enum(["healthcare", "business"]).optional(),
+  // Campos extra para profesionales (opcionales) — BookMe es solo Healthcare
+  line: z.literal("healthcare").optional(),
   specialty: z.string().optional(),
   // Ubicación del consultorio/local
   address: z.string().optional(),
@@ -66,10 +66,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
-    // Validar campos extra si es profesional
+    // Validar campos extra si es profesional — siempre healthcare
+    const effectiveLine = "healthcare" as const;
     if (account_type === "professional") {
-      if (!line) {
-        return NextResponse.json({ error: "La línea de negocio es requerida" }, { status: 400 });
+      if (line && line !== "healthcare") {
+        return NextResponse.json({ error: "Línea no soportada" }, { status: 400 });
       }
       if (!specialty || specialty.trim().length === 0) {
         return NextResponse.json({ error: "La especialidad es requerida" }, { status: 400 });
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4a. Si es profesional, crear la fila en professionals con trial
-    if (account_type === "professional" && line && specialty) {
+    if (account_type === "professional" && specialty) {
       const trialEnd = getTrialEndsAt();
 
       const slug = full_name
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
 
       const { error: profError } = await admin.from("professionals").insert({
         id: userId,
-        line,
+        line: effectiveLine,
         specialty,
         specialty_slug: specialtySlug,
         public_slug: slug,

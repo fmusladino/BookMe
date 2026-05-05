@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, startOfDay, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Calendar, Clock, Check, ChevronLeft, ChevronRight, ArrowLeft, User, Loader2, MapPin, Video } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast as sonnerToast } from 'sonner';
 import Link from 'next/link';
+import { useSession } from '@/hooks/use-session';
 
 interface WorkingHourRange {
   day_of_week: number;
@@ -66,7 +66,8 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   const [professional, setProfessional] = useState<Professional | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { user: sessionUser, loading: sessionLoading } = useSession();
+  const isLoggedIn = !!sessionUser;
   // Booking data
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -124,17 +125,6 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
 
     fetchProfessional();
   }, [slug]);
-
-  // Check if user is logged in
-  useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient();
-      const { data } = await supabase.auth.getUser();
-      setIsLoggedIn(!!data.user);
-    };
-
-    checkAuth();
-  }, []);
 
   // Fetch available slots when date and service change
   useEffect(() => {
@@ -622,8 +612,8 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
         })()}
       </div>
 
-      {/* Formulario guest: visible solo si NO hay sesión. Sin fricción de registro. */}
-      {!isLoggedIn && (
+      {/* Formulario guest: visible solo si terminó de cargar la sesión y NO hay sesión. */}
+      {!sessionLoading && !isLoggedIn && (
         <div className="space-y-3 rounded-xl border border-muted bg-muted/20 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>

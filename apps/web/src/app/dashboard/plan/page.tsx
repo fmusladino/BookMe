@@ -49,25 +49,6 @@ const HC_PLANS: PlanDef[] = [
   },
 ];
 
-const BIZ_PLANS: PlanDef[] = [
-  {
-    key: "base",
-    name: "Base",
-    features: ["Agenda completa", "Turnos ilimitados", "Recordatorios WhatsApp", "Notas de sesión"],
-  },
-  {
-    key: "standard",
-    name: "Standard",
-    features: ["Todo en Base", "Catálogo de servicios", "Push notifications", "MIA básica", "Reportes y exportación"],
-    highlight: true,
-  },
-  {
-    key: "premium",
-    name: "Premium",
-    features: ["Todo en Standard", "MIA avanzada", "WhatsApp propio", "Múltiples sedes", "Soporte prioritario"],
-  },
-];
-
 // ─── Page ───────────────────────────────────────────────────
 export default function PlanPage() {
   const { user, loading: sessionLoading } = useSession();
@@ -92,14 +73,14 @@ export default function PlanPage() {
     }
   }, [searchParams, router]);
 
-  const line = user?.professional?.line ?? "healthcare";
+  const line = "healthcare" as const;
   const currentPlan = user?.professional?.plan ?? "free";
   const subscriptionStatus = user?.subscription?.status ?? "trialing";
   const daysLeft = user?.subscription?.daysUntilTrialEnd;
   const trialEndsAt = user?.subscription?.trialEndsAt;
   const cancelledAt = user?.subscription?.cancelledAt;
   const subscriptionExpiresAt = user?.subscription?.subscriptionExpiresAt;
-  const plans = line === "business" ? BIZ_PLANS : HC_PLANS;
+  const plans = HC_PLANS;
 
   // Modal de baja
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -260,12 +241,8 @@ export default function PlanPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                line === "healthcare"
-                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
-              }`}>
-                {line === "healthcare" ? "Healthcare" : "Business"}
+              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                Healthcare
               </span>
               {/* Botón dar de baja — solo para suscripciones pagas activas (no en trial) */}
               {!isCancelled &&
@@ -343,7 +320,7 @@ export default function PlanPage() {
         {plans.map((plan) => {
           const isCurrentPlan = plan.key === currentPlan;
           const price = priceFor(plan.key);
-          const colorAccent = line === "healthcare" ? "blue" : "emerald";
+          const colorAccent = "blue";
 
           return (
             <Card
@@ -389,11 +366,7 @@ export default function PlanPage() {
                 <ul className="space-y-2.5">
                   {plan.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <Check className={`w-4 h-4 mt-0.5 shrink-0 ${
-                        line === "healthcare"
-                          ? "text-blue-500 dark:text-blue-400"
-                          : "text-emerald-500 dark:text-emerald-400"
-                      }`} />
+                      <Check className="w-4 h-4 mt-0.5 shrink-0 text-blue-500 dark:text-blue-400" />
                       {f}
                     </li>
                   ))}

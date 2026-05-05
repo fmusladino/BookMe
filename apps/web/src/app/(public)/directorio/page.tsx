@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, MapPin, ChevronLeft, ChevronRight, Loader2, Stethoscope, Briefcase, Building2, Shield, Filter, X, ChevronDown } from 'lucide-react';
+import { Search, MapPin, ChevronLeft, ChevronRight, Loader2, Stethoscope, Building2, Shield, Filter, X, ChevronDown } from 'lucide-react';
 
 const COUNTRY_NAMES: Record<string, string> = {
   AR: 'Argentina', UY: 'Uruguay', CL: 'Chile', CO: 'Colombia',
@@ -83,7 +83,7 @@ export default function DirectoryPage() {
   }, []);
 
   // Cargar filtros dinámicos (obras sociales con prestadores + localidades)
-  // Se recarga cada vez que cambia la línea (Salud/Negocios) para mantener datos frescos
+  // Se recarga cada vez que cambia la línea para mantener datos frescos
   const [filtersLoading, setFiltersLoading] = useState(false);
   useEffect(() => {
     setFiltersLoading(true);
@@ -181,7 +181,7 @@ export default function DirectoryPage() {
             Encontrá tu profesional y sacá turno al instante
           </h1>
           <p className="text-blue-200 dark:text-slate-400 text-sm mb-6 max-w-lg mx-auto">
-            Buscá entre profesionales de salud y negocios en toda LATAM
+            Buscá entre profesionales de la salud en toda LATAM
           </p>
 
           {/* Search + Cobertura + City en una fila */}
@@ -281,10 +281,10 @@ export default function DirectoryPage() {
       <div className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex gap-1.5">
-            {(['all', 'healthcare', 'business'] as const).map((l) => {
+            {(['all', 'healthcare'] as const).map((l) => {
               const active = line === l;
-              const label = l === 'all' ? 'Todos' : l === 'healthcare' ? 'Salud' : 'Negocios';
-              const Icon = l === 'healthcare' ? Stethoscope : l === 'business' ? Briefcase : null;
+              const label = l === 'all' ? 'Todos' : 'Salud';
+              const Icon = l === 'healthcare' ? Stethoscope : null;
               return (
                 <button
                   key={l}
@@ -293,9 +293,7 @@ export default function DirectoryPage() {
                     active
                       ? l === 'healthcare'
                         ? 'bg-blue-600 text-white'
-                        : l === 'business'
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-bookme-navy text-white dark:bg-bookme-mint dark:text-bookme-navy'
+                        : 'bg-bookme-navy text-white dark:bg-bookme-mint dark:text-bookme-navy'
                       : 'bg-secondary text-muted-foreground hover:bg-muted'
                   }`}
                 >
@@ -313,7 +311,7 @@ export default function DirectoryPage() {
         </div>
       </div>
 
-      {/* Filtros avanzados — visible cuando se elige un plan (Salud o Negocios) */}
+      {/* Filtros avanzados — visible cuando se elige un plan */}
       {line !== 'all' && (
         <div className="border-b border-border bg-card/50">
           <div className="max-w-5xl mx-auto px-4 py-3">
@@ -454,13 +452,8 @@ export default function DirectoryPage() {
                   .toUpperCase()
                   .slice(0, 2);
 
-                const isHealth = prof.line === 'healthcare';
-                const badgeColor = isHealth
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-                const accentBorder = isHealth
-                  ? 'hover:border-blue-400 dark:hover:border-blue-500'
-                  : 'hover:border-emerald-400 dark:hover:border-emerald-500';
+                const badgeColor = 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
+                const accentBorder = 'hover:border-blue-400 dark:hover:border-blue-500';
 
                 // Construir ubicación compacta
                 const locationParts = [prof.city, prof.province].filter(Boolean);
@@ -506,7 +499,7 @@ export default function DirectoryPage() {
 
                         {/* Badge línea */}
                         <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${badgeColor}`}>
-                          {isHealth ? 'Salud' : 'Neg.'}
+                          Salud
                         </span>
                       </div>
                     </div>

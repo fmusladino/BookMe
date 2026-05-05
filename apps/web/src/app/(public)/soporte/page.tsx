@@ -40,7 +40,7 @@ const faqCategories: FaqCategory[] = [
     questions: [
       {
         q: "¿Cómo me registro como profesional?",
-        a: "Hacé clic en \"Registrarse\" desde la página principal. Completá tus datos (nombre, DNI, email) y elegí tu línea: Salud o Negocios. Una vez registrado, MIA te guía paso a paso para configurar tu agenda.",
+        a: "Hacé clic en \"Registrarse\" desde la página principal. Completá tus datos (nombre, DNI, email) y empezá a configurar tu cuenta. Una vez registrado, MIA te guía paso a paso para configurar tu agenda.",
       },
       {
         q: "¿Puedo registrarme con mi cuenta de Google?",
@@ -147,7 +147,7 @@ const faqCategories: FaqCategory[] = [
     questions: [
       {
         q: "¿Cuánto cuesta BookMe?",
-        a: "BookMe ofrece un período de prueba gratuito. Después, hay planes Standard y Premium según la línea (Salud o Negocios). Podés ver los precios en la configuración de tu cuenta.",
+        a: "BookMe ofrece un período de prueba gratuito. Después, hay planes Base, Standard y Premium para profesionales de la salud. Podés ver los precios en la configuración de tu cuenta.",
       },
       {
         q: "¿Cómo funciona la liquidación a obras sociales?",
