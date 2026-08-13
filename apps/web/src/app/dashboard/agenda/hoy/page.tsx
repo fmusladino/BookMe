@@ -8,6 +8,11 @@ import {
   parseISO,
   addDays,
   subDays,
+  addWeeks,
+  subWeeks,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
   addMinutes,
   isSameDay,
 } from "date-fns";
@@ -27,6 +32,7 @@ import {
   AlertCircle,
   CalendarCheck,
   CalendarPlus,
+  CalendarRange,
   Video,
   MapPin,
   RefreshCw,
@@ -44,20 +50,39 @@ interface TimeSlot {
   appointment: AppointmentWithRelations | null;
 }
 
+interface DaySlots {
+  date: Date;
+  slots: TimeSlot[];
+}
+
+type ViewMode = "day" | "week";
+
 export default function HoyPage() {
   const router = useRouter();
   const { isLocked, message: lockMessage } = useAccountLocked();
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<ViewMode>("day");
   const { appointments, loading, fetchAppointments, updateAppointment, invalidateCache } = useAppointments();
   const { config: scheduleConfig, workingHours, fetchScheduleConfig } = useScheduleConfig();
   const [expandedSlot, setExpandedSlot] = useState<string | null>(null);
 
   // Modal para crear turno desde slot disponible
-  const [createModal, setCreateModal] = useState<{ open: boolean; time?: string }>({ open: false });
+  const [createModal, setCreateModal] = useState<{ open: boolean; time?: string; date?: Date }>({ open: false });
 
-  const loadDay = useCallback(
-    (date: Date) => {
-      fetchAppointments(startOfDay(date).toISOString(), endOfDay(date).toISOString());
+  // Días visibles según el modo: uno solo, o la semana completa (lunes a domingo)
+  const visibleDays = useMemo(() => {
+    if (viewMode === "day") return [selectedDate];
+    return eachDayOfInterval({
+      start: startOfWeek(selectedDate, { weekStartsOn: 1 }),
+      end: endOfWeek(selectedDate, { weekStartsOn: 1 }),
+    });
+  }, [viewMode, selectedDate]);
+
+  const loadRange = useCallback(
+    (days: Date[]) => {
+      const first = days[0]!;
+      const last = days[days.length - 1]!;
+      fetchAppointments(startOfDay(first).toISOString(), endOfDay(last).toISOString());
     },
     [fetchAppointments]
   );
@@ -67,74 +92,85 @@ export default function HoyPage() {
   }, [fetchScheduleConfig]);
 
   useEffect(() => {
-    loadDay(selectedDate);
-  }, [selectedDate, loadDay]);
+    loadRange(visibleDays);
+  }, [visibleDays, loadRange]);
 
-  // Generar los time slots del día
-  const timeSlots: TimeSlot[] = useMemo(() => {
-    const dayOfWeek = selectedDate.getDay();
-    const slotDuration = scheduleConfig?.slot_duration ?? 30;
-    const dayWH = workingHours?.filter((wh) => wh.day_of_week === dayOfWeek) ?? [];
+  // Generar los time slots de una fecha concreta
+  const buildSlots = useCallback(
+    (date: Date): TimeSlot[] => {
+      const dayOfWeek = date.getDay();
+      const slotDuration = scheduleConfig?.slot_duration ?? 30;
+      const dayWH = workingHours?.filter((wh) => wh.day_of_week === dayOfWeek) ?? [];
 
-    if (dayWH.length === 0 || !scheduleConfig?.working_days.includes(dayOfWeek)) return [];
+      if (dayWH.length === 0 || !scheduleConfig?.working_days.includes(dayOfWeek)) return [];
 
-    if (scheduleConfig?.vacation_mode) {
-      const vacFrom = scheduleConfig.vacation_from ? new Date(scheduleConfig.vacation_from) : null;
-      const vacUntil = scheduleConfig.vacation_until ? new Date(scheduleConfig.vacation_until) : null;
-      const isInVacation =
-        (!vacFrom && !vacUntil) ||
-        (!vacFrom && vacUntil && selectedDate <= vacUntil) ||
-        (vacFrom && !vacUntil && selectedDate >= vacFrom) ||
-        (vacFrom && vacUntil && selectedDate >= vacFrom && selectedDate <= vacUntil);
-      if (isInVacation) return [];
-    }
-
-    const slots: TimeSlot[] = [];
-    const dayAppts = [...appointments].sort(
-      (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
-    );
-
-    for (const wh of dayWH) {
-      const [startH, startM] = wh.start_time.split(":").map(Number);
-      const [endH, endM] = wh.end_time.split(":").map(Number);
-      let current = new Date(selectedDate);
-      current.setHours(startH!, startM!, 0, 0);
-      const endTime = new Date(selectedDate);
-      endTime.setHours(endH!, endM!, 0, 0);
-
-      const lunchStart = scheduleConfig?.lunch_break_start
-        ? (() => { const [h, m] = scheduleConfig.lunch_break_start!.split(":").map(Number); const d = new Date(selectedDate); d.setHours(h!, m!, 0, 0); return d; })()
-        : null;
-      const lunchEnd = scheduleConfig?.lunch_break_end
-        ? (() => { const [h, m] = scheduleConfig.lunch_break_end!.split(":").map(Number); const d = new Date(selectedDate); d.setHours(h!, m!, 0, 0); return d; })()
-        : null;
-
-      while (current < endTime) {
-        const slotTime = format(current, "HH:mm");
-        const isLunch = lunchStart && lunchEnd && current >= lunchStart && current < lunchEnd;
-
-        if (!isLunch) {
-          const apt = dayAppts.find((a) => {
-            const aptStart = parseISO(a.starts_at);
-            return format(aptStart, "HH:mm") === slotTime && isSameDay(aptStart, selectedDate);
-          });
-          slots.push({ time: slotTime, appointment: apt ?? null });
-        }
-
-        current = addMinutes(current, slotDuration);
+      if (scheduleConfig?.vacation_mode) {
+        const vacFrom = scheduleConfig.vacation_from ? new Date(scheduleConfig.vacation_from) : null;
+        const vacUntil = scheduleConfig.vacation_until ? new Date(scheduleConfig.vacation_until) : null;
+        const isInVacation =
+          (!vacFrom && !vacUntil) ||
+          (!vacFrom && vacUntil && date <= vacUntil) ||
+          (vacFrom && !vacUntil && date >= vacFrom) ||
+          (vacFrom && vacUntil && date >= vacFrom && date <= vacUntil);
+        if (isInVacation) return [];
       }
-    }
 
-    return slots;
-  }, [selectedDate, scheduleConfig, workingHours, appointments]);
+      const slots: TimeSlot[] = [];
+      const dayAppts = [...appointments].sort(
+        (a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()
+      );
 
-  const occupiedSlots = timeSlots.filter((s) => s.appointment !== null);
-  const freeSlots = timeSlots.filter((s) => s.appointment === null);
+      for (const wh of dayWH) {
+        const [startH, startM] = wh.start_time.split(":").map(Number);
+        const [endH, endM] = wh.end_time.split(":").map(Number);
+        let current = new Date(date);
+        current.setHours(startH!, startM!, 0, 0);
+        const endTime = new Date(date);
+        endTime.setHours(endH!, endM!, 0, 0);
+
+        const lunchStart = scheduleConfig?.lunch_break_start
+          ? (() => { const [h, m] = scheduleConfig.lunch_break_start!.split(":").map(Number); const d = new Date(date); d.setHours(h!, m!, 0, 0); return d; })()
+          : null;
+        const lunchEnd = scheduleConfig?.lunch_break_end
+          ? (() => { const [h, m] = scheduleConfig.lunch_break_end!.split(":").map(Number); const d = new Date(date); d.setHours(h!, m!, 0, 0); return d; })()
+          : null;
+
+        while (current < endTime) {
+          const slotTime = format(current, "HH:mm");
+          const isLunch = lunchStart && lunchEnd && current >= lunchStart && current < lunchEnd;
+
+          if (!isLunch) {
+            const apt = dayAppts.find((a) => {
+              const aptStart = parseISO(a.starts_at);
+              return format(aptStart, "HH:mm") === slotTime && isSameDay(aptStart, date);
+            });
+            slots.push({ time: slotTime, appointment: apt ?? null });
+          }
+
+          current = addMinutes(current, slotDuration);
+        }
+      }
+
+      return slots;
+    },
+    [scheduleConfig, workingHours, appointments]
+  );
+
+  const daysWithSlots: DaySlots[] = useMemo(
+    () => visibleDays.map((date) => ({ date, slots: buildSlots(date) })),
+    [visibleDays, buildSlots]
+  );
+
+  const allSlots = useMemo(() => daysWithSlots.flatMap((d) => d.slots), [daysWithSlots]);
+  const timeSlots = daysWithSlots[0]?.slots ?? [];
+
+  const occupiedSlots = allSlots.filter((s) => s.appointment !== null);
+  const freeSlots = allSlots.filter((s) => s.appointment === null);
   const stats = {
-    total: timeSlots.length,
+    total: allSlots.length,
     free: freeSlots.length,
     occupied: occupiedSlots.length,
-    occupancyPct: timeSlots.length > 0 ? Math.round((occupiedSlots.length / timeSlots.length) * 100) : 0,
+    occupancyPct: allSlots.length > 0 ? Math.round((occupiedSlots.length / allSlots.length) * 100) : 0,
   };
 
   const handleStatusChange = async (apt: AppointmentWithRelations, newStatus: string) => {
@@ -147,12 +183,23 @@ export default function HoyPage() {
   };
 
   const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+  const isWeek = viewMode === "week";
+  // En modo semana alcanza con que algún día tenga atención
+  const hasSlots = allSlots.length > 0;
   const isWorkDay = timeSlots.length > 0;
 
   const workingRange = useMemo(() => {
     if (timeSlots.length === 0) return "";
     return `${timeSlots[0]!.time} - ${timeSlots[timeSlots.length - 1]!.time}`;
   }, [timeSlots]);
+
+  // Etiqueta del rango visible en el navegador de fechas
+  const rangeLabel = isWeek
+    ? `${format(visibleDays[0]!, "d MMM", { locale: es })} - ${format(visibleDays[visibleDays.length - 1]!, "d MMM", { locale: es })}`
+    : format(selectedDate, "dd/MM/yyyy");
+
+  const goPrev = () => setSelectedDate((d) => (isWeek ? subWeeks(d, 1) : subDays(d, 1)));
+  const goNext = () => setSelectedDate((d) => (isWeek ? addWeeks(d, 1) : addDays(d, 1)));
 
   return (
     <div className="space-y-4">
@@ -161,36 +208,73 @@ export default function HoyPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-teal-200 text-[10px] font-bold uppercase tracking-widest">
-              Agenda Diaria
+              {isWeek ? "Agenda Semanal" : "Agenda Diaria"}
             </p>
             <h1 className="text-xl font-bold capitalize">
-              {isToday ? "Hoy" : format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
+              {isWeek
+                ? `Semana del ${format(visibleDays[0]!, "d 'de' MMMM", { locale: es })}`
+                : isToday
+                  ? "Hoy"
+                  : format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
             </h1>
-            {isWorkDay && workingRange && (
+            {!isWeek && isWorkDay && workingRange && (
               <p className="text-teal-100 text-xs mt-0.5">
                 {workingRange} · Turnos de {scheduleConfig?.slot_duration ?? 30} min
               </p>
             )}
+            {isWeek && hasSlots && (
+              <p className="text-teal-100 text-xs mt-0.5">
+                {stats.total} espacios · Turnos de {scheduleConfig?.slot_duration ?? 30} min
+              </p>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Selector día / semana */}
+            <div className="flex items-center rounded-lg bg-white/10 p-0.5 backdrop-blur-sm">
+              <Button
+                size="sm"
+                variant="ghost"
+                className={cn(
+                  "h-7 px-3 text-xs hover:text-white",
+                  !isWeek ? "bg-white text-teal-700 hover:bg-white/90" : "text-white hover:bg-white/20"
+                )}
+                onClick={() => setViewMode("day")}
+              >
+                <CalendarCheck className="mr-1 h-3.5 w-3.5" />
+                Día
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className={cn(
+                  "h-7 px-3 text-xs hover:text-white",
+                  isWeek ? "bg-white text-teal-700 hover:bg-white/90" : "text-white hover:bg-white/20"
+                )}
+                onClick={() => setViewMode("week")}
+              >
+                <CalendarRange className="mr-1 h-3.5 w-3.5" />
+                Semana
+              </Button>
+            </div>
+
             <div className="flex items-center rounded-lg bg-white/10 backdrop-blur-sm">
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
-                onClick={() => setSelectedDate((d) => subDays(d, 1))}
+                onClick={goPrev}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="px-2 text-sm font-medium min-w-[90px] text-center">
-                {format(selectedDate, "dd/MM/yyyy")}
+              <span className="px-2 text-sm font-medium min-w-[110px] text-center capitalize">
+                {rangeLabel}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
-                onClick={() => setSelectedDate((d) => addDays(d, 1))}
+                onClick={goNext}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -206,14 +290,14 @@ export default function HoyPage() {
               )}
               onClick={() => setSelectedDate(new Date())}
             >
-              Hoy
+              {isWeek ? "Esta semana" : "Hoy"}
             </Button>
 
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-white hover:bg-white/20 hover:text-white"
-              onClick={() => loadDay(selectedDate)}
+              onClick={() => loadRange(visibleDays)}
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
@@ -222,7 +306,7 @@ export default function HoyPage() {
       </div>
 
       {/* ─── Stats bar estilo HisMe ─── */}
-      {isWorkDay && (
+      {hasSlots && (
         <div className="flex items-center gap-3 flex-wrap text-sm">
           <div className="flex items-center gap-2 bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 rounded-lg px-3 py-1.5 font-medium">
             <CalendarCheck className="h-3.5 w-3.5" />
@@ -260,13 +344,15 @@ export default function HoyPage() {
         </div>
       )}
 
-      {/* ─── Día no laboral ─── */}
-      {!loading && !isWorkDay && (
+      {/* ─── Sin atención en el rango ─── */}
+      {!loading && !hasSlots && (
         <div className="rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-16 text-center">
           <CalendarCheck className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600" />
-          <p className="mt-4 text-lg font-medium text-muted-foreground">Día no laboral</p>
+          <p className="mt-4 text-lg font-medium text-muted-foreground">
+            {isWeek ? "Semana sin atención" : "Día no laboral"}
+          </p>
           <p className="text-sm text-muted-foreground/60 mt-1">
-            No hay horarios de atención configurados para este día
+            No hay horarios de atención configurados para {isWeek ? "esta semana" : "este día"}
           </p>
         </div>
       )}
@@ -276,22 +362,51 @@ export default function HoyPage() {
       <CreateAppointmentModal
         open={createModal.open}
         onOpenChange={(open) => setCreateModal({ open })}
-        onSuccess={() => { invalidateCache(); loadDay(selectedDate); }}
-        initialDate={selectedDate}
+        onSuccess={() => { invalidateCache(); loadRange(visibleDays); }}
+        initialDate={createModal.date ?? selectedDate}
         initialTime={createModal.time}
       />
 
-      {!loading && isWorkDay && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {timeSlots.map((slot) => {
+      {!loading && hasSlots && (
+        <div className="space-y-5">
+          {daysWithSlots.map(({ date, slots }) => {
+            const dayKey = format(date, "yyyy-MM-dd");
+            // En modo semana ocultamos los días sin atención configurada
+            if (slots.length === 0) return null;
+            const dayOccupied = slots.filter((s) => s.appointment !== null).length;
+
+            return (
+              <section key={dayKey} className="space-y-2">
+                {isWeek && (
+                  <div className="flex items-center gap-2 border-b pb-1.5">
+                    <h2 className={cn(
+                      "text-sm font-bold capitalize",
+                      isSameDay(date, new Date()) ? "text-teal-600 dark:text-teal-400" : "text-foreground"
+                    )}>
+                      {format(date, "EEEE d 'de' MMMM", { locale: es })}
+                    </h2>
+                    {isSameDay(date, new Date()) && (
+                      <span className="rounded bg-teal-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        Hoy
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {dayOccupied} de {slots.length} ocupados
+                    </span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {slots.map((slot) => {
+            const slotKey = `${dayKey}-${slot.time}`;
             const apt = slot.appointment;
-            const isExpanded = expandedSlot === slot.time;
+            const isExpanded = expandedSlot === slotKey;
 
             if (!apt) {
               // ─── Slot disponible ─── Teal como HisMe — click abre modal de agendar
               return (
                 <div
-                  key={slot.time}
+                  key={slotKey}
                   title={isLocked ? lockMessage ?? "Cuenta en modo solo lectura" : undefined}
                   className={cn(
                     "group flex items-center gap-3 rounded-lg bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 px-3.5 py-2.5 transition-all",
@@ -299,7 +414,7 @@ export default function HoyPage() {
                       ? "opacity-50 cursor-not-allowed"
                       : "hover:bg-teal-100 dark:hover:bg-teal-950/40 hover:border-teal-400 cursor-pointer"
                   )}
-                  onClick={() => { if (!isLocked) setCreateModal({ open: true, time: slot.time }); }}
+                  onClick={() => { if (!isLocked) setCreateModal({ open: true, time: slot.time, date }); }}
                 >
                   <span className="text-sm font-mono font-bold text-teal-700 dark:text-teal-300 w-11">
                     {slot.time}
@@ -348,13 +463,13 @@ export default function HoyPage() {
 
             return (
               <div
-                key={slot.time}
+                key={slotKey}
                 className={cn(
                   "rounded-lg border border-l-4 overflow-hidden transition-all cursor-pointer hover:shadow-md",
                   cardStyles,
                   isExpanded && "ring-2 ring-teal-400/40"
                 )}
-                onClick={() => setExpandedSlot(isExpanded ? null : slot.time)}
+                onClick={() => setExpandedSlot(isExpanded ? null : slotKey)}
               >
                 <div className="px-3.5 py-2.5">
                   {/* Fila: Hora + Nombre + Badge */}
@@ -511,6 +626,10 @@ export default function HoyPage() {
                   </div>
                 )}
               </div>
+            );
+          })}
+                </div>
+              </section>
             );
           })}
         </div>

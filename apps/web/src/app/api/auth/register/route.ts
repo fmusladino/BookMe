@@ -176,14 +176,28 @@ export async function POST(request: NextRequest) {
     if (account_type === "professional" && specialty) {
       const trialEnd = getTrialEndsAt();
 
-      const slug = full_name
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-")
-        .slice(0, 60);
+      const baseSlug =
+        full_name
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9\s-]/g, "")
+          .replace(/\s+/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 60) || "profesional";
+
+      // public_slug es UNIQUE: si el nombre ya est\u00e1 tomado, agregamos sufijo num\u00e9rico
+      const { data: takenSlugs } = await admin
+        .from("professionals")
+        .select("public_slug")
+        .like("public_slug", `${baseSlug}%`);
+
+      const taken = new Set((takenSlugs ?? []).map((r) => r.public_slug as string));
+      let slug = baseSlug;
+      for (let i = 2; taken.has(slug); i++) {
+        slug = `${baseSlug.slice(0, 55)}-${i}`;
+      }
 
       const specialtySlug = specialty
         .toLowerCase()
@@ -215,7 +229,11 @@ export async function POST(request: NextRequest) {
         console.error("Professional error:", profError);
         await admin.from("profiles").delete().eq("id", userId);
         await admin.auth.admin.deleteUser(userId);
-        return NextResponse.json({ error: "Error al crear el perfil profesional" }, { status: 500 });
+        // Exponemos el detalle del error de BD: sin esto el fallo es imposible de diagnosticar
+        return NextResponse.json(
+          { error: `Error al crear el perfil profesional: ${profError.message}`, code: profError.code },
+          { status: 500 }
+        );
       }
 
       // Crear configuración de agenda por defecto

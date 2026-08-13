@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useCallback, memo } from "react";
+import { useMemo, useRef, useCallback, memo, useState, useEffect } from "react";
 import { format, addMinutes, isSameDay, parseISO, differenceInMinutes, getDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,18 @@ const STATUS_STYLES: Record<string, { card: string; border: string; badge: strin
   },
 };
 
+// ─── Paleta de la grilla horaria ───
+// Cada tipo de franja tiene un color propio para distinguirlas de un vistazo:
+// verde = atiende, ámbar = almuerzo, gris rayado = fuera de horario.
+const SLOT_STYLES = {
+  available:
+    "bg-emerald-100/70 hover:bg-emerald-200 border-emerald-300/60 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/30 dark:border-emerald-700/50",
+  lunch:
+    "bg-amber-100/70 border-amber-300/60 dark:bg-amber-500/15 dark:border-amber-700/50",
+  off: "bg-slate-200/70 border-slate-300/60 dark:bg-slate-800/60 dark:border-slate-700/50",
+  neutral: "border-border/40 hover:bg-accent/50",
+} as const;
+
 interface WeekViewProps {
   weekDays: Date[];
   appointments: AppointmentWithRelations[];
@@ -77,14 +89,24 @@ export const WeekView = memo(function WeekView({
 }: WeekViewProps) {
   const dragRef = useRef<{ appointmentId: string; durationMin: number } | null>(null);
 
+  // Hora actual para la línea indicadora. Arranca en null y se setea en el cliente
+  // para no romper la hidratación (el server no sabe la hora del navegador).
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   const hours = useMemo(
     () => Array.from({ length: TOTAL_HOURS }, (_, i) => HOUR_START + i),
     []
   );
 
-  // Calcular disponibilidad por dia y hora
+  // Calcular disponibilidad por dia y hora.
+  // Devolvemos el almuerzo aparte para poder pintarlo distinto del "fuera de horario".
   const availabilityByDay = useMemo(() => {
-    const map = new Map<string, Set<number>>();
+    const map = new Map<string, { available: Set<number>; lunch: Set<number> }>();
     if (!scheduleConfig || !workingHours || workingHours.length === 0) return map;
 
     for (const day of weekDays) {
@@ -92,7 +114,7 @@ export const WeekView = memo(function WeekView({
       const dayOfWeek = getDay(day);
 
       if (!scheduleConfig.working_days.includes(dayOfWeek)) {
-        map.set(dayKey, new Set());
+        map.set(dayKey, { available: new Set(), lunch: new Set() });
         continue;
       }
 
@@ -105,7 +127,7 @@ export const WeekView = memo(function WeekView({
           (vacFrom && !vacUntil && day >= vacFrom) ||
           (vacFrom && vacUntil && day >= vacFrom && day <= vacUntil);
         if (isInVacation) {
-          map.set(dayKey, new Set());
+          map.set(dayKey, { available: new Set(), lunch: new Set() });
           continue;
         }
       }
@@ -126,15 +148,17 @@ export const WeekView = memo(function WeekView({
         }
       }
 
+      const lunchHours = new Set<number>();
       if (scheduleConfig.lunch_break_start && scheduleConfig.lunch_break_end) {
         const lunchStart = parseInt(scheduleConfig.lunch_break_start.split(":")[0] ?? "0", 10);
         const lunchEnd = parseInt(scheduleConfig.lunch_break_end.split(":")[0] ?? "0", 10);
         for (let h = lunchStart; h < lunchEnd; h++) {
-          availableHours.delete(h);
+          // Solo marcamos como almuerzo las horas que además son laborales
+          if (availableHours.delete(h)) lunchHours.add(h);
         }
       }
 
-      map.set(dayKey, availableHours);
+      map.set(dayKey, { available: availableHours, lunch: lunchHours });
     }
 
     return map;
@@ -220,7 +244,7 @@ export const WeekView = memo(function WeekView({
           {weekDays.map((day) => {
             const dayKey = format(day, "yyyy-MM-dd");
             const dayAvail = availabilityByDay.get(dayKey);
-            const isWorkDay = dayAvail ? dayAvail.size > 0 : true;
+            const isWorkDay = dayAvail ? dayAvail.available.size > 0 : true;
 
             return (
               <div
@@ -283,8 +307,9 @@ export const WeekView = memo(function WeekView({
               >
                 {/* Slots horarios */}
                 {hours.map((hour) => {
-                  const isAvailable = hasConfig && dayAvailableHours ? dayAvailableHours.has(hour) : false;
-                  const isUnavailable = hasConfig && !isAvailable;
+                  const isAvailable = hasConfig && dayAvailableHours ? dayAvailableHours.available.has(hour) : false;
+                  const isLunch = hasConfig && dayAvailableHours ? dayAvailableHours.lunch.has(hour) : false;
+                  const isUnavailable = hasConfig && !isAvailable && !isLunch;
 
                   return (
                     <div
@@ -292,10 +317,12 @@ export const WeekView = memo(function WeekView({
                       className={cn(
                         "h-[80px] border-b transition-colors cursor-pointer group relative",
                         isAvailable
-                          ? "bg-emerald-50/80 border-emerald-200/40 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800/30 dark:hover:bg-emerald-900/40"
-                          : isUnavailable
-                            ? "bg-gray-100/60 border-gray-200/40 dark:bg-gray-900/40 dark:border-gray-800/30"
-                            : "border-border/30 hover:bg-accent/50"
+                          ? SLOT_STYLES.available
+                          : isLunch
+                            ? SLOT_STYLES.lunch
+                            : isUnavailable
+                              ? SLOT_STYLES.off
+                              : SLOT_STYLES.neutral
                       )}
                       onClick={() => {
                         if (onEmptySlotClick) {
@@ -309,18 +336,28 @@ export const WeekView = memo(function WeekView({
                       onDrop={(e) => handleDrop(e, day, hour)}
                       onDragOver={handleDragOver}
                     >
-                      {/* Indicador de disponible al hacer hover — estilo HisMe */}
+                      {/* Guía de la media hora: ayuda a ubicar turnos de 30 min */}
+                      <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-foreground/10" />
+
+                      {/* Franja disponible: siempre visible, se refuerza en hover */}
                       {isAvailable && (
-                        <div className="h-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                            Disponible
+                        <div className="h-full flex items-center justify-center pointer-events-none">
+                          <span className="text-[11px] font-medium text-emerald-700/70 opacity-0 group-hover:opacity-100 transition-opacity dark:text-emerald-300/80">
+                            + Turno
+                          </span>
+                        </div>
+                      )}
+                      {isLunch && (
+                        <div className="h-full flex items-center justify-center pointer-events-none">
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70 dark:text-amber-300/70">
+                            Almuerzo
                           </span>
                         </div>
                       )}
                       {isUnavailable && (
                         <div className="h-full flex items-center justify-center pointer-events-none">
-                          {/* Patrón de rayas diagonales sutiles para no-laborales */}
-                          <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.06]"
+                          {/* Rayado diagonal para dejar clara la franja no laborable */}
+                          <div className="absolute inset-0 text-slate-400 opacity-25 dark:text-slate-500 dark:opacity-20"
                             style={{
                               backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 5px, currentColor 5px, currentColor 6px)",
                             }}
@@ -330,6 +367,17 @@ export const WeekView = memo(function WeekView({
                     </div>
                   );
                 })}
+
+                {/* Línea de la hora actual (solo en la columna de hoy) */}
+                {now && isSameDay(day, now) && now.getHours() >= HOUR_START && now.getHours() < HOUR_END && (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 z-30 flex items-center"
+                    style={{ top: `${((now.getHours() - HOUR_START) + now.getMinutes() / 60) * SLOT_HEIGHT}px` }}
+                  >
+                    <span className="h-2 w-2 -ml-1 rounded-full bg-rose-500 shadow" />
+                    <span className="h-px flex-1 bg-rose-500" />
+                  </div>
+                )}
 
                 {/* Bloqueos — estilo mejorado */}
                 {dayBlocks.map((block) => {
@@ -497,6 +545,46 @@ export const WeekView = memo(function WeekView({
               </div>
             );
           })}
+        </div>
+
+        {/* Leyenda de colores */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-emerald-300/60 bg-emerald-100/70 dark:border-emerald-700/50 dark:bg-emerald-500/15" />
+            Disponible
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-amber-300/60 bg-amber-100/70 dark:border-amber-700/50 dark:bg-amber-500/15" />
+            Almuerzo
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-slate-300/60 bg-slate-200/70 dark:border-slate-700/50 dark:bg-slate-800/60" />
+            Fuera de horario
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-dashed border-amber-400 bg-amber-50 dark:bg-amber-900/30" />
+            Bloqueado
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-emerald-200 border-l-4 border-l-emerald-500 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/30" />
+            Turno confirmado
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-teal-200 border-l-4 border-l-teal-500 bg-teal-50 dark:border-teal-700 dark:bg-teal-900/30" />
+            Pendiente
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-sky-200 border-l-4 border-l-sky-500 bg-sky-50 dark:border-sky-700 dark:bg-sky-900/20" />
+            Completado
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm border border-red-200 border-l-4 border-l-red-400 bg-red-50 dark:border-red-800 dark:bg-red-900/20" />
+            Cancelado / ausente
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-rose-500" />
+            Hora actual
+          </span>
         </div>
       </div>
     </div>
