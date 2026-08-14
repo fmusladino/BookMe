@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   X,
   Calendar,
-  Clock,
   Users,
   FileText,
   BarChart3,
@@ -92,25 +91,16 @@ const TOUR_STEPS: TourStep[] = [
     targetSelector: '[data-tour="nav-agenda"]',
     title: "Tu Agenda",
     description:
-      "Acá vas a ver todos tus turnos en formato semanal o mensual. Podés arrastrar turnos para reprogramarlos y ver tu disponibilidad de un vistazo.",
+      "Acá vas a ver todos tus turnos. Con el selector Día / Semana cambiás entre la lista del día —ideal para cuando estás atendiendo— y la semana completa, para ver tu disponibilidad de un vistazo.",
     icon: <Calendar className="h-4 w-4" />,
     position: "right",
   },
   {
-    id: "hoy",
-    targetSelector: '[data-tour="nav-hoy"]',
-    title: "Vista del día",
-    description:
-      "La vista rápida de hoy te muestra los turnos del día en formato lista, ideal para cuando estás atendiendo.",
-    icon: <Clock className="h-4 w-4" />,
-    position: "right",
-  },
-  {
     id: "videoconsultas",
-    targetSelector: '[data-tour="nav-hoy"]',
+    targetSelector: '[data-tour="nav-agenda"]',
     title: "Videoconsultas automáticas ✨",
     description:
-      "Para las reservas virtuales, BookMe genera un link gratis (Jitsi) al guardar el turno. El paciente lo recibe por email al confirmar, 24hs antes y 5 min antes. Vos entrás con el botón azul 'Entrar a la videoconsulta' en Hoy y en la agenda semanal. 30 min antes la tarjeta se marca con ring azul 'Próximo'. Los turnos reservados online desde bookme.ar/@tunombre quedan automáticamente confirmados.",
+      "Para las reservas virtuales, BookMe genera un link gratis (Jitsi) al guardar el turno. El paciente lo recibe por email al confirmar, 24hs antes y 5 min antes. Vos entrás con el botón azul 'Entrar a la videoconsulta' desde la Agenda. 30 min antes la tarjeta se marca con ring azul 'Próximo'. Los turnos reservados online desde bookme.ar/@tunombre quedan automáticamente confirmados.",
     icon: <Video className="h-4 w-4" />,
     position: "right",
   },

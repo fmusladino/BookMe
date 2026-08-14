@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   Calendar,
-  Clock,
   Settings,
   Users,
   BarChart3,
@@ -54,8 +53,8 @@ interface NavItem {
 // ─── Items de navegación por rol y línea ─────────────────────────────
 
 const NAV_PROFESSIONAL_BASE: NavItem[] = [
-  { label: "Agenda", href: "/dashboard/agenda", icon: Calendar },
-  { label: "Hoy", href: "/dashboard/agenda/hoy", icon: Clock },
+  // La agenda del día (con selector Día/Semana) es la única entrada de agenda
+  { label: "Agenda", href: "/dashboard/agenda/hoy", icon: Calendar },
   { label: "Pacientes", href: "/dashboard/pacientes", icon: Users },
   { label: "Notificaciones", href: "/dashboard/notificaciones", icon: Bell },
   { label: "Servicios", href: "/dashboard/servicios", icon: FileText },
