@@ -26,6 +26,10 @@ const DAYS = [
   { value: 0, label: "Domingo" },
 ];
 
+// Cobertura para quien atiende sin obra social. Va fija arriba del listado
+// (no dentro del catálogo) para que no se pierda en el orden alfabético.
+const PARTICULAR_NAME = "Particular";
+
 // Lista precargada de obras sociales y prepagas argentinas
 const INSURANCES_CATALOG = [
   // Prepagas principales
@@ -352,6 +356,34 @@ export default function ConfiguracionPage() {
       } else {
         const data = await res.json() as { error?: string };
         toast.error(data.error ?? "Error al agregar obra social");
+      }
+    } catch {
+      toast.error("Error al agregar obra social");
+    } finally {
+      setAddingInsurance(false);
+    }
+  };
+
+  // Marca/desmarca una cobertura del listado por nombre
+  const handleToggleInsurance = async (name: string, isSelected: boolean) => {
+    if (isSelected) {
+      const ins = profInsurances.find((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (ins) await handleRemoveInsurance(ins.id, ins.name);
+      return;
+    }
+    setAddingInsurance(true);
+    try {
+      const res = await fetch("/api/professionals/me/insurances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        toast.success(`"${name}" agregada`);
+        fetchProfInsurances();
+      } else {
+        const data = await res.json() as { error?: string };
+        toast.error(data.error ?? "Error al agregar");
       }
     } catch {
       toast.error("Error al agregar obra social");
@@ -974,6 +1006,40 @@ export default function ConfiguracionPage() {
             </div>
           )}
 
+          {/* Particular — fija arriba, para quien no trabaja con obras sociales */}
+          {(() => {
+            const isParticular = profInsurances.some(
+              (p) => p.name.toLowerCase() === PARTICULAR_NAME.toLowerCase()
+            );
+            return (
+              <label
+                className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  isParticular
+                    ? "border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/20"
+                    : "border-dashed hover:bg-accent"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isParticular}
+                  onChange={() => handleToggleInsurance(PARTICULAR_NAME, isParticular)}
+                  disabled={addingInsurance}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="space-y-0.5">
+                  <p className={`text-sm font-medium ${isParticular ? "text-emerald-700 dark:text-emerald-400" : ""}`}>
+                    Particular (sin obra social)
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Si no trabajás con obras sociales ni prepagas, marcá esta opción: es la que
+                    te permite cargar turnos y precios particulares.
+                  </p>
+                </div>
+                {isParticular && <Check className="ml-auto h-4 w-4 shrink-0 text-emerald-500" />}
+              </label>
+            );
+          })()}
+
           {/* Buscador */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1036,37 +1102,7 @@ export default function ConfiguracionPage() {
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={async () => {
-                          if (isSelected) {
-                            const ins = profInsurances.find(
-                              (p) => p.name.toLowerCase() === name.toLowerCase()
-                            );
-                            if (ins) await handleRemoveInsurance(ins.id, ins.name);
-                          } else {
-                            setNewInsuranceName(name);
-                            // Llamar directamente con el nombre
-                            setAddingInsurance(true);
-                            try {
-                              const res = await fetch("/api/professionals/me/insurances", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ name }),
-                              });
-                              if (res.ok) {
-                                toast.success(`"${name}" agregada`);
-                                fetchProfInsurances();
-                              } else {
-                                const data = await res.json() as { error?: string };
-                                toast.error(data.error ?? "Error al agregar");
-                              }
-                            } catch {
-                              toast.error("Error al agregar obra social");
-                            } finally {
-                              setAddingInsurance(false);
-                              setNewInsuranceName("");
-                            }
-                          }
-                        }}
+                        onChange={() => handleToggleInsurance(name, isSelected)}
                         className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                       />
                       <span className={`text-sm ${isSelected ? "font-medium text-emerald-700 dark:text-emerald-400" : ""}`}>

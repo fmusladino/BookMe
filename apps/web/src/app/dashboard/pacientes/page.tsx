@@ -426,11 +426,14 @@ export default function PacientesPage() {
                         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         <option value="">Seleccionar...</option>
-                        {insurances.map((ins) => (
-                          <option key={ins.id} value={ins.id}>
-                            {ins.name}
-                          </option>
-                        ))}
+                        {/* "Particular" ya está cubierto por el radio de arriba */}
+                        {insurances
+                          .filter((ins) => ins.name.toLowerCase() !== "particular")
+                          .map((ins) => (
+                            <option key={ins.id} value={ins.id}>
+                              {ins.name}
+                            </option>
+                          ))}
                       </select>
                     </div>
                     <div className="space-y-1.5">
