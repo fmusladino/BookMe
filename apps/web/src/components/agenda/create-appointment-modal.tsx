@@ -433,7 +433,7 @@ export function CreateAppointmentModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onClose={() => onOpenChange(false)} className="sm:max-w-6xl">
+      <DialogContent onClose={() => onOpenChange(false)} className="sm:max-w-7xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Plus className="h-5 w-5" />

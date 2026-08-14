@@ -19,7 +19,9 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
         className="fixed inset-0 bg-black/80 animate-in fade-in-0"
         onClick={() => onOpenChange(false)}
       />
-      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2">
+      {/* El contenedor necesita ancho propio: sin esto el panel se achica al
+          tamaño de su contenido y el max-w que declara nunca se aplica. */}
+      <div className="fixed left-1/2 top-1/2 z-50 flex w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 justify-center">
         {children}
       </div>
     </div>
@@ -31,7 +33,8 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
     <div
       ref={ref}
       className={cn(
-        "w-full rounded-lg border bg-background p-6 shadow-lg animate-in fade-in-0 zoom-in-95 max-h-[95vh] overflow-y-auto",
+        // relative: ancla el botón de cerrar al panel y no al contenedor
+        "relative w-full rounded-lg border bg-background p-6 shadow-lg animate-in fade-in-0 zoom-in-95 max-h-[95vh] overflow-y-auto",
         !className?.includes("max-w-") && "max-w-lg",
         className
       )}
