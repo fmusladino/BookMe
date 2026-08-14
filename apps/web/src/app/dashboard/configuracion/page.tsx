@@ -160,7 +160,6 @@ export default function ConfiguracionPage() {
   // Obras sociales / prepagas del profesional
   const [profInsurances, setProfInsurances] = useState<ProfInsurance[]>([]);
   const [insurancesLoading, setInsurancesLoading] = useState(false);
-  const [newInsuranceName, setNewInsuranceName] = useState("");
   const [addingInsurance, setAddingInsurance] = useState(false);
   const [insuranceSearch, setInsuranceSearch] = useState("");
   // Recordatorios configurables
@@ -338,31 +337,6 @@ export default function ConfiguracionPage() {
       setInsurancesLoading(false);
     }
   }, []);
-
-  const handleAddInsurance = async () => {
-    const name = newInsuranceName.trim();
-    if (!name) return;
-    setAddingInsurance(true);
-    try {
-      const res = await fetch("/api/professionals/me/insurances", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (res.ok) {
-        toast.success(`"${name}" agregada correctamente`);
-        setNewInsuranceName("");
-        fetchProfInsurances();
-      } else {
-        const data = await res.json() as { error?: string };
-        toast.error(data.error ?? "Error al agregar obra social");
-      }
-    } catch {
-      toast.error("Error al agregar obra social");
-    } finally {
-      setAddingInsurance(false);
-    }
-  };
 
   // Marca/desmarca una cobertura del listado por nombre
   const handleToggleInsurance = async (name: string, isSelected: boolean) => {
@@ -1040,112 +1014,106 @@ export default function ConfiguracionPage() {
             );
           })()}
 
-          {/* Buscador */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar obra social o prepaga..."
-              value={insuranceSearch}
-              onChange={(e) => setInsuranceSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          {/* Lista precargada con checkboxes */}
-          {insurancesLoading ? (
-            <div className="flex items-center justify-center py-4 text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando...
+          {/* Buscador con sugerencias: la lista solo aparece al escribir */}
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar obra social o prepaga..."
+                value={insuranceSearch}
+                onChange={(e) => setInsuranceSearch(e.target.value)}
+                className="pl-9"
+              />
+              {insuranceSearch && (
+                <button
+                  type="button"
+                  onClick={() => setInsuranceSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-          ) : (
-            <div className="border rounded-lg max-h-64 overflow-y-auto">
-              {(() => {
-                const profNames = new Set(profInsurances.map((p) => p.name.toLowerCase()));
-                const searchLower = insuranceSearch.toLowerCase();
-                const filtered = INSURANCES_CATALOG.filter((name) =>
-                  name.toLowerCase().includes(searchLower)
-                );
 
-                if (filtered.length === 0 && insuranceSearch.trim()) {
-                  return (
-                    <div className="p-4 text-center space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        No se encontró &quot;{insuranceSearch}&quot; en el listado
+            {insurancesLoading ? (
+              <div className="flex items-center justify-center py-4 text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando...
+              </div>
+            ) : !insuranceSearch.trim() ? (
+              <p className="text-xs text-muted-foreground">
+                Escribí el nombre para buscarla. Si no está en el listado, la podés crear.
+              </p>
+            ) : (
+              (() => {
+                const query = insuranceSearch.trim();
+                const queryLower = query.toLowerCase();
+                const profNames = new Set(profInsurances.map((p) => p.name.toLowerCase()));
+
+                const matches = INSURANCES_CATALOG.filter((name) =>
+                  name.toLowerCase().includes(queryLower)
+                );
+                // Solo ofrecemos crear si no existe ya con ese mismo nombre
+                const exactExists =
+                  matches.some((name) => name.toLowerCase() === queryLower) ||
+                  profNames.has(queryLower);
+
+                return (
+                  <div className="border rounded-lg max-h-64 overflow-y-auto divide-y">
+                    {matches.map((name) => {
+                      const isSelected = profNames.has(name.toLowerCase());
+                      return (
+                        <label
+                          key={name}
+                          className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                            isSelected
+                              ? "bg-emerald-50 dark:bg-emerald-950/20"
+                              : "hover:bg-muted"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleInsurance(name, isSelected)}
+                            disabled={addingInsurance}
+                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className={`text-sm ${isSelected ? "font-medium text-emerald-700 dark:text-emerald-400" : ""}`}>
+                            {name}
+                          </span>
+                          {isSelected && <Check className="ml-auto h-4 w-4 text-emerald-500" />}
+                        </label>
+                      );
+                    })}
+
+                    {matches.length === 0 && (
+                      <p className="px-4 py-2.5 text-sm text-muted-foreground">
+                        No hay resultados para &quot;{query}&quot;
                       </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setNewInsuranceName(insuranceSearch.trim());
-                          handleAddInsurance();
+                    )}
+
+                    {!exactExists && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleToggleInsurance(query, false);
                           setInsuranceSearch("");
                         }}
                         disabled={addingInsurance}
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-primary hover:bg-muted transition-colors disabled:opacity-50"
                       >
-                        <Plus className="mr-1 h-4 w-4" />
-                        Agregar &quot;{insuranceSearch.trim()}&quot; manualmente
-                      </Button>
-                    </div>
-                  );
-                }
-
-                return filtered.map((name) => {
-                  const isSelected = profNames.has(name.toLowerCase());
-                  return (
-                    <label
-                      key={name}
-                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b last:border-b-0 transition-colors ${
-                        isSelected
-                          ? "bg-emerald-50 dark:bg-emerald-950/20"
-                          : "hover:bg-accent"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleInsurance(name, isSelected)}
-                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                      />
-                      <span className={`text-sm ${isSelected ? "font-medium text-emerald-700 dark:text-emerald-400" : ""}`}>
-                        {name}
-                      </span>
-                      {isSelected && (
-                        <Check className="ml-auto h-4 w-4 text-emerald-500" />
-                      )}
-                    </label>
-                  );
-                });
-              })()}
-            </div>
-          )}
-
-          {/* Agregar manualmente si no está en la lista */}
-          <div className="pt-2 border-t">
-            <p className="text-xs text-muted-foreground mb-2">
-              ¿No encontrás tu obra social? Agregala manualmente:
-            </p>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Nombre de la obra social..."
-                value={newInsuranceName}
-                onChange={(e) => setNewInsuranceName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddInsurance();
-                }}
-                className="flex-1"
-              />
-              <Button
-                onClick={handleAddInsurance}
-                disabled={addingInsurance || !newInsuranceName.trim()}
-                size="sm"
-              >
-                {addingInsurance ? (
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="mr-1 h-4 w-4" />
-                )}
-                Agregar
-              </Button>
-            </div>
+                        {addingInsurance ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                        Crear &quot;{query}&quot;
+                      </button>
+                    )}
+                  </div>
+                );
+              })()
+            )}
           </div>
         </CardContent>
       </Card>
