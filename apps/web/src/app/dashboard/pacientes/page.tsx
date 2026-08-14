@@ -320,7 +320,7 @@ export default function PacientesPage() {
             className="absolute inset-0 bg-black/50"
             onClick={() => setShowModal(false)}
           />
-          <div className="relative z-10 w-full max-w-lg rounded-lg border bg-card p-6 shadow-xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="relative z-10 w-full max-w-7xl rounded-lg border bg-card p-6 shadow-xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-heading font-semibold">
                 {editingId ? "Editar paciente" : "Nuevo paciente"}
@@ -334,8 +334,8 @@ export default function PacientesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="sm:col-span-2 lg:col-span-1 space-y-1.5">
                   <label className="text-sm font-medium">Nombre completo *</label>
                   <input
                     type="text"
@@ -417,7 +417,7 @@ export default function PacientesPage() {
                 </div>
 
                 {!form.is_particular && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium">Obra Social</label>
                       <select
